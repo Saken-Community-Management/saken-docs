@@ -1,0 +1,82 @@
+# Authentication
+
+Saken has two completely different access models: **admins/treasurers sign in**, while
+**residents/concierges use magic links**. There are no passwords anywhere.
+
+## Admin / treasurer sign-in
+
+A unified `/auth` screen offers three methods, in order:
+
+```mermaid
+flowchart TD
+    A[/auth] --> G[Continue with Google<br/>signInWithOAuth]
+    A --> E[Continue with email<br/>signInWithOtp email]
+    A --> W[Continue with WhatsApp<br/>phone OTP]
+    G & E & W --> CB[/auth/callback/]
+    CB --> R{Lookup identity<br/>in public.users}
+    R -- new --> S[/setup/]
+    R -- returning --> D[route by active role]
+```
+
+1. **Google** — `supabase.auth.signInWithOAuth({ provider: 'google' })`.
+2. **Email magic-link** — `supabase.auth.signInWithOtp({ email })`; the user clicks the
+   link Supabase emails them.
+3. **WhatsApp / phone OTP** — a phone-number entry then a 6-digit code, via
+   `signInWithOtp({ phone })` / `verifyOtp`. A first-time phone signup also captures an
+   email to anchor the account.
+
+All three resolve to a single email-keyed account, then the post-auth router decides
+new-vs-returning (see [First admin account](/getting-started/first-admin)).
+
+### Phone / WhatsApp OTP — partial
+
+:::warning[There is no WhatsApp Business API]
+The *"Continue with WhatsApp"* path is **phone OTP** delivered through Supabase Auth (with
+a `channel="whatsapp"` option and a `/auth/whatsapp` form). It is **not** a Meta / WhatsApp
+Business Cloud API integration — it's a generic phone-OTP button wearing a WhatsApp label.
+The whole phone path is **hidden behind `NEXT_PUBLIC_PHONE_AUTH_ENABLED`** and is off by
+default. Google + email cover the great majority of admins.
+:::
+
+The OTP send is handled by a Supabase **edge function** (`supabase/functions/send-otp`).
+
+:::danger[`send-otp` has an audit finding]
+The edge function falls back to an **unverified** JWT decode on signature-verification
+failure, and skips verification entirely if `HOOK_SECRET` is unset (audit L-S1). That is
+an SMS-pump / toll-fraud vector. The audit's guidance: **fail closed** and remove the
+"keeps the flow working while we debug" fallback **before** relying on phone auth.
+:::
+
+## Resident & concierge magic links
+
+Residents and concierges **never sign up**. The admin generates a link and shares it
+(today, manually — see [delivery](/api/delivery)). The token in the URL is the credential.
+
+- **Resident:** `/r/{apartmentId}/{token}` — validated against `apartments.view_token`
+  (a `UUID`) by `src/lib/resident/validate-token.ts`. Any mismatch returns an
+  **indistinguishable 404**, so you can't probe for valid apartments.
+- The validated path uses the **service-role** client (residents aren't auth users) but is
+  always scoped to the validated `complexId`, with cross-complex IDs returning 404s.
+
+:::warning[Resident tokens are permanent in v1]
+A resident's `view_token` is permanent for the life of the row — there is **no UI to
+rotate or revoke** it, and reassigning an apartment to a new resident does **not**
+invalidate the old link (DECISIONS log, 2026-05-22). If a token leaks, an admin rotates it
+with a direct DB `UPDATE`. This is acceptable for a small, trust-based pilot; v2's
+account-based resident auth makes it moot.
+:::
+
+## Security posture
+
+The audit rated authorization Saken's **strongest dimension** — zero Critical, zero High
+application-layer issues:
+
+- Identity is **re-derived server-side everywhere**; client-passed
+  `complexId`/`userId`/`apartmentId` are never trusted for authorization.
+- Service-role (RLS-bypassing) queries in anonymous resident routes are **every one gated
+  on token validation first**, then strictly complex-scoped.
+- Invite tokens are 256-bit (`randomBytes(32)`); the open-redirect guard is tight; no
+  secrets leak to the client.
+
+Sessions persist ~30 days on the device; sign-out lives in settings. For how this binds to
+the database, see [Auth & RLS wiring](/architecture/auth-rls).

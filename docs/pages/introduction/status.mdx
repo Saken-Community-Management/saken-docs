@@ -1,0 +1,80 @@
+# Status & maturity
+
+Saken is a **pilot-stage MVP**. The core financial loop — *set up → dashboard →
+record payments/expenses → YTD report* — is polished and production-tested. Several
+advertised capabilities, though, are partial or stubbed. This page is the honest map.
+
+:::warning[This is an MVP]
+"Feature-complete for v1" does **not** mean "everything the client asked for." The
+biggest gaps are **real WhatsApp delivery, monthly collection targets, and automatic
+reminders** — none of which exist yet. Read the whole table before assuming a capability
+is live.
+:::
+
+## Feature status
+
+The table below is drawn from the **Feature Audit of 2026-06-16**
+(`docs/Saken-Feature-Audit-2026-06-16.docx`), which covers all 11 items from the
+client's development plan, reconciled with the code as of this writing.
+
+| # | Feature | Status | Notes |
+| --- | --- | --- | --- |
+| 1 | Sign up / log in via WhatsApp | 🟡 **Partial** | Phone OTP via Supabase Auth with a `channel="whatsapp"` option and a `/auth/whatsapp` form exist. There is **no** WhatsApp Business / Meta Cloud API integration — it's a generic phone-OTP button. Gated behind `NEXT_PUBLIC_PHONE_AUTH_ENABLED`. |
+| 2 | Send invitations (resident / treasurer / concierge) | 🟡 **Partial** | The invitation **pipeline** is done: `createInvitation` server action, 256-bit tokens, per-slot uniqueness, and a live acceptance flow (`accept_invitation` RPC). But **automated delivery is stubbed** — both `deliverByEmail` and `deliverByWhatsApp` currently return *"not yet implemented."* In practice the admin copies the invite link and shares it manually (the design's intended WhatsApp hand-off). The 2026-06-16 audit's *"email live via Resend"* is aspirational; the shipped code disagrees. |
+| 3 | Automatic payment reminders | 🔴 **Missing** | Zero infrastructure — no scheduler, no reminder delivery, no due-date tracking. Needs a whole new subsystem. |
+| 4 | Transfer admin/treasurer role between users | 🔴 **Missing** | Roles can be revoked and re-invited, but there is no hand-off / promote / demote flow. |
+| 5 | Role stacking (resident is also admin/treasurer) | ✅ **Done** | A resident can hold an admin/treasurer/concierge role via a separate `roles` row. The `accept_invitation` RPC handles escalation. |
+| 6 | Admin/treasurer access for a non-resident | ✅ **Done** | Concierge and treasurer don't require an apartment. RLS reads `roles.role` without an apartment match. |
+| 7 | Tag & recognise treasurer role in the UI | ✅ **Done** | Dedicated `/dashboard/treasurers` page, treasurer-scoped `/resident/*` routes with a badge, role labels in management lists, full RLS write on payments + expenses. |
+| 8 | Monthly collection targets | 🟡 **Partial** | **Annual** budget-vs-actual is fully live (`/dashboard/cash`, `/dashboard/collections`, `/dashboard/budget`, `/dashboard/expenses`). There is **no** monthly tracking, per-month target, or calendar view. |
+| 9 | General flows & UI/UX polish | 🟠 **Rough edges** | Core flows are polished, but: a resident cash-balance display regression, an edit-then-back discontinuity, asymmetric pre-Saken back arrows, some dead-code clutter, a numeric-input inconsistency, a timezone inconsistency, and **no PWA manifest**. |
+
+### WhatsApp delivery for invitations
+
+:::danger[Both invite-delivery channels are stubs]
+Invitations register a delivery channel, but **both** implementations are not-yet-built:
+`deliverByWhatsApp()` returns `{ ok: false, reason: 'WhatsApp delivery not yet
+implemented' }` (`src/lib/invitations/delivery/whatsapp.ts`) and `deliverByEmail()`
+likewise returns *"Email delivery not yet implemented"* (`.../delivery/email.ts`). The
+invitation **row and token are created** and the **acceptance flow works** — only the
+automated send is deferred. The orchestrator is built to drop in a real WhatsApp Business
+API or Resend implementation without other changes. See
+[Email & WhatsApp delivery](/api/delivery).
+:::
+
+## Engineering maturity
+
+A full project audit (`docs/AUDIT-2026-06-14.md`) graded the codebase as *"genuinely
+well-engineered… far above the median for a pre-pilot app"* and found **zero Critical
+and zero application-layer security issues**. Several of the audit's high-priority items
+have since been **fixed** in the days after it was written:
+
+| Audit finding (2026-06-14) | Resolution |
+| --- | --- |
+| 🔴 `roles_readable` view leaked every user's email to the anon key | **Fixed** — dropped in migration `0047` / commit `fe25f53` |
+| Phone-login path had no phone-uniqueness guard (H-S1) | **Fixed** — `uniq_authenticated_phone` added in migration `0044` |
+| Empty-string email/phone identity collision | **Fixed** — forbidden in migration `0045` (commit `cf193a3`) |
+| No automated tests anywhere (H-C1) | **Addressed** — a Vitest unit suite was added (commit `b09441f`, PR #11); pure money/diff/format functions are now covered |
+| Untyped Supabase client → ~558 hand-casts (H-C2) | **Addressed** — the Supabase data layer was typed (PR #11) |
+
+What the audit flags as **still open** (none pilot-blocking): no pagination on list
+pages, money aggregations pulled into JS rather than SQL, sequential dashboard fetches,
+admin/resident page clones, the hand-applied migration process (now mitigated by a
+[CI migration-replay job](/operations/ci-cd)), and `console.error` as the only logging
+sink.
+
+:::tip[The docs may lead the code, or vice-versa]
+Saken moves fast. The canonical `CLAUDE.md` reference once fell a migration behind the
+schema; this site reconciles the design docs, the audit, the live-DB introspection, and
+the git history as of **June 2026**. When in doubt, **the live database is ground
+truth** — a lesson the team learned the hard way (see [Migration history](/database/migrations)).
+:::
+
+## Legend
+
+| Badge | Meaning |
+| --- | --- |
+| ✅ **Done** | Shipped and production-tested |
+| 🟡 **Partial** | Some of it works; meaningful pieces are missing |
+| 🟠 **Rough edges** | Works, but with known UX/quality defects |
+| 🔴 **Missing** | Not built — would need a new subsystem |

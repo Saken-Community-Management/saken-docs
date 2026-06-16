@@ -1,0 +1,81 @@
+# Contributing
+
+How to work on Saken. The conventions below are distilled from `Saken-v1-Build-Plan.docx`,
+`DECISIONS.md`, and the CI setup.
+
+## Before you start a session
+
+Open the source of truth, every time:
+
+1. `docs/Saken-v1-Design-Specification.docx` — *what* to build.
+2. `docs/Saken-v1-Prototype.html` — *how* it should feel.
+3. `ARCHITECTURE.md` / `DECISIONS.md` — the current map and the decision log.
+
+> *"The 30 seconds it takes to re-center on the source of truth saves hours of fixing the
+> wrong thing."* — Build Plan
+
+## Filing an issue
+
+File issues on the [project board](/roadmap/project-board). A good issue:
+
+- States the **problem**, not just a solution.
+- Links the relevant **docs page** or **audit finding** (e.g. "audit M-P1") when one
+  exists.
+- For UI bugs, names the **route** and the role surface (admin / resident / concierge).
+
+## Branch & PR conventions
+
+- **Branch for anything risky.** Anything touching **auth, the database schema, or money
+  calculations** goes in a feature branch first; merge to `main` only when verified. Vercel
+  gives every branch a preview URL — use it.
+- **Small commits, often.** Each unit of work is one or more commits with a message that
+  describes the change (*"Add payment receipt screen"*, not *"updates"*). Saken's history
+  is a model of this — batched, descriptive commits.
+- **Open a PR.** CI runs `app` (lint + typecheck + build) and `migration-replay` — both
+  must pass to merge. See [CI/CD](/operations/ci-cd).
+
+## Code review expectations
+
+The audit set a high bar that contributions should preserve:
+
+- **`strict` TypeScript**, zero `any` / `@ts-ignore` / `@ts-nocheck`.
+- **Every Supabase error checked** and surfaced as a typed user message — never swallowed.
+- **Identity re-derived server-side**; never trust client-supplied `complexId`/`userId`/
+  `apartmentId` for authorization. Scope-check them.
+- **Money is `NUMERIC`**, `CHECK (amount > 0)`, and rounded at persistence boundaries.
+- **Write RLS as you build each feature**, not all at the end. Admins read/write their
+  complex; residents read; concierges create/read their own submissions.
+- **Don't skip the verify block** on migrations.
+
+## Database changes
+
+Every schema change is a **migration file** — never a direct DB edit. Follow the
+[migrations workflow](/operations/migrations-workflow): house style with a self-verifying
+block, forward-only, expand/contract. Log any decision that deviates from the spec in
+`DECISIONS.md` (date, decision, rationale, where reflected).
+
+## Testing
+
+Add Vitest coverage for **pure logic** (money math, anchor math, diff logic, formatters) —
+that's where the dangerous bugs hide. Verify a change with `npm run build` (typecheck) and
+`npm run test`; you generally don't need the full auth stack running to validate code.
+
+## Test the weird money cases
+
+The Build Plan's standing advice — deliberately test:
+
+- a share-0 apartment (excluded), shares summing to 999 instead of 1000;
+- an apartment with both positive opening-paid *and* positive carryover;
+- a budget amendment after some apartments have paid;
+- year-end rollover with a partial surplus applied;
+- a fiscal year that was reset, then closed normally;
+- an expense with an `invoice_period_month` in a prior fiscal year.
+
+> *"Don't just test the happy path."*
+
+## Where to file feedback on these docs
+
+This documentation site lives in
+[`Saken-Community-Management/saken-docs`](https://github.com/Saken-Community-Management/saken-docs).
+Use the **"Suggest changes to this page"** link in the footer of any page, or open an
+issue on that repo. See [About this site](/about).

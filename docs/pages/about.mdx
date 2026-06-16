@@ -1,0 +1,105 @@
+# About this site
+
+How this documentation site is built, and how to maintain it.
+
+## Built with Vocs
+
+This site is built with **[Vocs](https://vocs.dev)** — a React + Vite documentation
+framework by the wagmi team (it powers the viem and wagmi docs). Vocs ships, out of the
+box, everything a docs site needs: a clean sidebar + top nav, built-in search (Pagefind-
+style, via MiniSearch), dark mode, syntax highlighting, MDX, and **Mermaid** diagram
+support. That let this site focus on *content* rather than on wiring a custom stack.
+
+| Piece | Choice |
+| --- | --- |
+| Framework | Vocs `^2.0.14` (React 19 + Vite + Waku under the hood) |
+| Content | MDX in `docs/pages/` |
+| Diagrams | Mermaid (built into Vocs) |
+| Search | built-in, generated at build time |
+| Hosting | GitHub Pages (project page) |
+| Deploy | GitHub Actions |
+
+:::info[Why Vocs and not a custom Vite/React/MDX stack]
+The original spec called for "React + Vite" docs. Vocs *is* React + Vite, purpose-built for
+documentation, so it delivered the Stripe/Tailwind-style result immediately instead of
+spending a day wiring sidebar, search, dark mode, and MDX by hand. No blockers were hit, so
+the Vocs path was kept (the documented fallbacks were VitePress or a hand-rolled Vite +
+`@mdx-js/rollup` setup).
+:::
+
+## Project layout
+
+```
+saken-docs/
+├── vocs.config.ts        # title, sidebar, top nav, basePath, theme
+├── docs/
+│   ├── pages/            # all MDX content (mirrors the sidebar)
+│   └── dist/             # build output (generated)
+├── public/               # icon.svg, logo.svg (Saken brand marks)
+└── .github/workflows/
+    └── deploy-docs.yml   # build + deploy to GitHub Pages
+```
+
+Key config: `basePath: '/saken-docs'` (required for GitHub Pages project-page hosting),
+`srcDir: 'docs'`, `outDir: 'docs/dist'`, and a slate-blue `accentColor` matching the Saken
+brand mark.
+
+## How to update content
+
+::::steps
+
+### Edit the MDX
+
+Find the page under `docs/pages/` (the path mirrors the URL) and edit it. Use the
+**"Suggest changes to this page"** link in any page's footer to jump straight to the file
+on GitHub.
+
+### Preview locally (optional)
+
+```bash
+npm install
+npm run dev      # local preview with hot reload
+npm run build    # production build (also checks for dead links)
+npm run preview  # serve the production build
+```
+
+### Push to `main`
+
+The `deploy-docs` GitHub Actions workflow builds the site and publishes it to GitHub Pages
+automatically. The live site updates within a couple of minutes.
+
+::::
+
+:::tip[Dead-link checking is on]
+Vocs fails the build on broken internal links (`checkDeadlinks: true`). If you rename or
+remove a page, update every link to it, or the deploy will fail — a useful guardrail.
+:::
+
+## How it's deployed
+
+The workflow (`.github/workflows/deploy-docs.yml`) runs on push to `main`: `npm ci` →
+`npm run build` → upload `docs/dist` as a Pages artifact → deploy. GitHub Pages is
+configured with **build type = workflow** (GitHub Actions), not the legacy branch-based
+build.
+
+Live at **`https://saken-community-management.github.io/saken-docs/`**.
+
+## Sourcing & honesty
+
+Every substantive claim here is sourced from the Saken repositories: the design docs
+(`Saken-v1-Design-Specification.docx`, `-Build-Plan.docx`, `-Executive-Summary.docx`), the
+audits (`AUDIT-2026-06-14.md`, `Saken-Feature-Audit-2026-06-16.docx`), the verified schema
+docs (`SCHEMA-current-state.md`, `SCHEMA-live-reconciliation-2026-06-14.md`), the
+`CLAUDE.md` / `ARCHITECTURE.md` / `DECISIONS.md` references, the prototype, and the source
+code + git history itself. Where the docs and the code disagreed (notably **invitation
+delivery**, which an audit called "live" but the code shows stubbed), this site follows the
+**code** and says so. Missing or partial features are flagged with callouts rather than
+glossed over.
+
+## Known TODOs for this site
+
+- **Screenshots** — the site is prose-only; the `saken/public` folder has no captured
+  screens. Add screenshots from a seeded demo community ([Quick tour](/introduction/quick-tour)).
+- **Brand assets** — the logo/icon here are simple SVG marks created for the docs; replace
+  with official Saken brand assets if/when they exist.
+- **OG image** — currently uses the generic Vocs OG endpoint; swap for a Saken-branded one.

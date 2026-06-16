@@ -1,0 +1,78 @@
+# Architecture overview
+
+Saken is a **Supabase-centred** system. The web app today *is* the backend (business logic
+in Next.js server actions, authorization in Postgres RLS). Two companion services —
+`saken-server` and `saken-mcp` — extend that core without duplicating it.
+
+## The whole picture
+
+```mermaid
+flowchart TD
+    subgraph Clients
+      Web["saken (Next.js 16 web app)<br/>Vercel · Frankfurt"]
+      RN["saken-mobile (React Native)<br/><i>planned</i>"]
+      LLM["LLM client<br/>(Claude Desktop / Code)"]
+    end
+
+    subgraph Supabase["Supabase (eu-central-1)"]
+      PG[(Postgres<br/>+ 52 RLS policies<br/>+ SECURITY DEFINER RPCs)]
+      Auth["Supabase Auth<br/>Google · email · phone OTP"]
+      Storage["Storage<br/>expense-receipts bucket"]
+      Edge["Edge fn: send-otp"]
+    end
+
+    Server["saken-server (NestJS)<br/><i>built, not yet wired</i>"]
+    MCP["saken-mcp<br/>(MCP / stdio)"]
+
+    Web -->|"@supabase/ssr cookie client (RLS)"| PG
+    Web -->|service-role (narrow)| PG
+    Web --> Auth
+    Web --> Storage
+    Auth -.hook.-> Edge
+    Web -.email.-> Resend["Resend (planned)"]
+    Auth -.SMS.-> Twilio["Twilio / SMS"]
+
+    RN -->|Bearer JWT| Server
+    LLM -->|MCP| MCP -->|Bearer JWT| Server
+    Server -->|per-request user client (RLS)| PG
+    Server --> Auth
+```
+
+## The three repositories
+
+| Repo | Tech | Role |
+| --- | --- | --- |
+| **`saken`** | Next.js 16, React 19, TS, Tailwind 4 | The product today — UI **and** business logic (server actions) |
+| **`saken-server`** | NestJS | A standalone API that mirrors the server actions; **built but not wired to the frontend yet** |
+| **`saken-mcp`** | TypeScript MCP SDK | Exposes Saken to LLM clients; a thin client of `saken-server` |
+
+## Load-bearing decisions
+
+1. **Postgres RLS is the authorization spine.** ~52 RLS policies plus `SECURITY DEFINER`
+   helper functions/RPCs decide who can read and write what, keyed off `auth.email()` /
+   `auth.jwt()->>'phone'`. Both the web app's cookie client and the backend's per-request
+   client carry the user's JWT so RLS fires identically. See
+   [Auth & RLS wiring](/architecture/auth-rls).
+
+2. **Service-role is used sparingly.** The RLS-bypassing service-role key is reached for
+   only where it's unavoidable: resident magic-link reads (residents aren't auth users),
+   concierge pre-write validation reads, and `users`-table writes (language,
+   active_complex). Never trusted with client-supplied authorization.
+
+3. **Atomic multi-write flows are Postgres RPCs.** `accept_invitation`,
+   `rollover_fiscal_year`, `create_complex_with_admin`, `exit_community`,
+   `delete_community` are `SECURITY DEFINER` transactions, reused verbatim by every client.
+
+4. **The complex is the tenant boundary.** Every query scopes to a single complex,
+   resolved server-side from the caller's active membership. See
+   [Multi-tenant isolation](/architecture/multi-tenant).
+
+## Hosting & data residency
+
+- The web app deploys to **Vercel**, with functions pinned to **`fra1` (Frankfurt)** to
+  co-locate with the Supabase project in **`eu-central-1`** (commit `84a98b1`).
+- Supabase provides Postgres, Auth, Storage (the `expense-receipts` bucket), and the
+  `send-otp` edge function.
+
+Dive deeper: [Frontend](/architecture/frontend) · [Backend & MCP](/architecture/backend)
+· [Auth & RLS](/architecture/auth-rls) · [Multi-tenant isolation](/architecture/multi-tenant).

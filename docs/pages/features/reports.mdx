@@ -1,0 +1,61 @@
+# Reports (YTD, PDF export)
+
+Saken produces two kinds of PDF: a **payment receipt** and a **year-to-date financial
+report** suitable for the building's WhatsApp group. Both are rendered server-side with
+`@react-pdf/renderer`.
+
+## The YTD report
+
+The report (`src/lib/reports/render-ytd-pdf.tsx`, served from `/api/reports/ytd` and the
+resident/magic-link equivalents) contains:
+
+- **Page 1** — a header with a report number, summary tiles (cash on hand, annual budget,
+  collected YTD %, spent YTD %), a *where-the-money-went* table (each category's spent vs.
+  budget vs. %), active special collections, and an **amendment footnote** if the budget
+  was amended.
+- **Page 2+** — apartment balances (labels only, no names, for privacy), the payments
+  list, and the expenses list.
+
+The admin taps **Export PDF report**, the browser downloads it, and the admin shares it
+manually via WhatsApp.
+
+:::info[Period selector is partial]
+The design specified a period dropdown (this month / last month / last quarter / YTD /
+all time). In practice the report always renders the **active fiscal year** — the
+`saken-server` backend notes per-`?fy=` PDF reports as *intentionally deferred*, matching
+the web app.
+:::
+
+## Payment receipts
+
+Each recorded payment can be downloaded as an **official PDF receipt**
+(`src/lib/reports/render-receipt-pdf.tsx`, `/api/payments/[id]/receipt`, shipped
+2026-06-15). It mirrors the on-screen receipt: complex, apartment, payer, amount, date,
+sequential receipt number, recorder, and balance after.
+
+## Rendering path
+
+```mermaid
+flowchart LR
+    Req[GET /api/reports/ytd] --> Data[fetchReportData]
+    Data --> RPDF[react-pdf renderToBuffer]
+    RPDF --> Buf[PDF buffer] --> DL[download]
+```
+
+The shared PDF scaffolding lives in `src/lib/reports/pdf-shared.tsx`; report data is
+gathered by `fetch-report-data.ts`.
+
+:::warning[PDF generation is synchronous and unbounded]
+`renderToBuffer` is CPU-bound (it blocks the event loop via yoga-layout), renders the
+**full, uncapped** payment + expense lists, holds the whole buffer in memory, and runs
+against Vercel's function timeout (~2 s for ~500 rows). Fine at pilot scale; structurally
+unbounded as years of history accumulate (audit M-P4). The fix is to cap/paginate the PDF
+detail tables or offload to a background job before any complex reaches multi-thousand-row
+years.
+:::
+
+## Resident & magic-link reports
+
+Residents get the same report through their authenticated surface and the anonymous
+magic-link route (`/api/r/[apartmentId]/[token]/reports/ytd`), each gated on token/identity
+validation and scoped to the validated complex.

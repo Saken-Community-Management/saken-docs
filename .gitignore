@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+
+# build output
+docs/dist/
+.vocs/cache/
+
+# local QA artifacts
+.playwright-mcp/
+*.local
+
+# logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

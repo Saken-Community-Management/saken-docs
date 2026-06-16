@@ -1,0 +1,88 @@
+# Server actions
+
+In the web app, **server actions** *are* the API. They live under `src/lib/<domain>/`,
+marked `'use server'`, and follow a consistent shape: authenticate → resolve role/complex
+server-side → scope-check client IDs → write through the RLS-aware client → return a typed
+result or a typed error.
+
+## The standard shape
+
+```ts
+export async function createPayment(
+  input: PaymentFormValues,
+): Promise<PaymentFormSaveResult> {
+  const supabase = await createClient()
+
+  // 1. Authenticate + resolve role & complex (server-derived)
+  const userResult = await requireUser(supabase, ['admin', 'treasurer'])
+  if ('error' in userResult) return { error: userResult.error }
+  const { userId, complexId } = userResult
+
+  // 2. Scope-check any client-supplied id
+  const scope = await verifyApartmentInComplex(supabase, input.apartmentId, complexId)
+  if ('error' in scope) return { error: scope.error }
+
+  // 3. … write through the cookie client (RLS applies) …
+}
+```
+
+Every Supabase error is checked and surfaced as a typed user message; nothing is silently
+swallowed (the one documented exception is the budget-version snapshot, audit M-C7).
+
+## The catalogue
+
+### Invitations — `src/lib/invitations/actions.ts`
+| Action | Auth | Notes |
+| --- | --- | --- |
+| `createInvitation(input)` | admin | role/apartment slot rules, 256-bit token, 30-day expiry |
+| `revokeInvitation(...)` | admin | sets `revoked_at` |
+| `reinviteInvitation(...)` | admin | re-issues delivery |
+| `acceptInvitation(...)` | invitee | calls `accept_invitation` RPC |
+
+### Payments — `src/lib/payments/actions.ts`
+| Action | Auth |
+| --- | --- |
+| `createPayment(input)` | admin / treasurer |
+| `updatePayment(...)` | admin / treasurer |
+| `deletePayment(...)` | admin / treasurer (soft-delete) |
+
+### Expenses — `src/lib/expenses/actions.ts`
+| Action | Auth |
+| --- | --- |
+| `createExpense(input)` | admin / treasurer (posts `approved`) |
+| `updateExpense(...)` · `deleteExpense(...)` | admin / treasurer |
+
+### Concierge & approvals
+| Action | File | Auth |
+| --- | --- | --- |
+| `submitConciergeExpense(input)` | `concierge/actions.ts` | concierge (posts `pending`) |
+| `updateConciergeExpense(...)` | `concierge/actions.ts` | concierge (while pending) |
+| `approveConciergeSubmission(...)` | `admin-submissions/actions.ts` | admin / treasurer |
+| `rejectConciergeSubmission(...)` | `admin-submissions/actions.ts` | admin / treasurer |
+
+### Special projects — `src/lib/special-projects/actions.ts`
+| Action | Auth |
+| --- | --- |
+| `createProject` · `updateProject` · `upsertProjectShare` · `closeProject` | admin |
+| `recordProjectContribution(projectId, input)` | admin / treasurer |
+
+### Fiscal year & membership
+| Action | File | Auth |
+| --- | --- | --- |
+| `rolloverFiscalYear()` | `fiscal/rollover-actions.ts` | admin (→ `rollover_fiscal_year` RPC) |
+| `setActiveComplex(...)` | `membership/set-active-complex-action.ts` | any member |
+| `exitCommunity(...)` | `membership/exit-community-action.ts` | non-admin (→ `exit_community` RPC) |
+| `deleteCommunity(...)` | `membership/delete-community-action.ts` | admin (→ `delete_community` RPC) |
+| `updateMyLanguage(...)` | `i18n/update-my-language-action.ts` | any user |
+
+### Setup wizard — `src/lib/setup/`
+Idempotent `useEnsure*` helpers (`useEnsureComplex`, `useEnsureBuilding`,
+`useEnsureApartment`, `useEnsureResident`, `useEnsureBudgetLine`) insert/update wizard rows
+with autosave. `useEnsureComplex` calls the atomic `create_complex_with_admin` RPC.
+
+:::tip[Migrating to the backend]
+Each of these actions has a mirror endpoint in `saken-server` (see
+[Backend endpoints](/api/backend-endpoints)). The web app can be migrated to call the
+backend incrementally — the strangler pattern — without changing behaviour, because both
+sit on the same RLS + RPCs.
+:::

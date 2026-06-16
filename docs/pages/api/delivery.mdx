@@ -1,0 +1,80 @@
+# Email & WhatsApp delivery
+
+Saken needs to get invite links and (eventually) reminders to people. This page is the
+honest state of message delivery — and it is mostly **not built yet**.
+
+## What "delivery" covers
+
+Two distinct things get conflated under "WhatsApp," so be precise:
+
+1. **Admin sign-in OTP** — phone/WhatsApp one-time codes for admins logging in. This goes
+   through **Supabase Auth + an SMS provider (Twilio)** and a `send-otp` edge function. It
+   *works* (behind `NEXT_PUBLIC_PHONE_AUTH_ENABLED`), but it is **phone OTP**, not a
+   WhatsApp Business integration.
+2. **Invitation & reminder delivery** — sending the invite link (or a payment reminder) to
+   a resident/treasurer/concierge. This is the subject of the rest of this page, and it is
+   **stubbed**.
+
+## The delivery orchestrator
+
+Invitation delivery is built around a pluggable orchestrator
+(`src/lib/invitations/delivery/orchestrator.ts`) that routes by the invitation's
+`delivery_method`:
+
+```ts [orchestrator.ts]
+export async function deliverInvitation(invitation: InvitationRow): Promise<DeliveryResult> {
+  switch (invitation.deliveryMethod) {
+    case 'email':    return deliverByEmail(invitation)
+    case 'whatsapp': return deliverByWhatsApp(invitation)
+    // exhaustiveness guard — a new method that isn't routed is a compile error
+  }
+}
+```
+
+The channel is **chosen at invite-creation time** (`createInvitation` picks `email` when an
+email is present, else `whatsapp` for a phone), and the orchestrator just routes — the
+choice stays auditable on the row.
+
+## Both channels are stubs
+
+:::danger[Email delivery is NOT live]
+Despite the 2026-06-16 feature audit saying *"email delivery live via Resend,"* the shipped
+code disagrees — `deliverByEmail` is a stub:
+
+```ts [src/lib/invitations/delivery/email.ts]
+// Real implementation lands in Phase A5 (Resend integration…).
+export async function deliverByEmail(_invitation): Promise<DeliveryResult> {
+  return { ok: false, reason: 'Email delivery not yet implemented' }
+}
+```
+
+There is **no `resend` package installed** and no email-sending code in `src/`. Likewise
+`deliverByWhatsApp` returns *"WhatsApp delivery not yet implemented."*
+:::
+
+What this means in practice: when an admin creates an invitation, the **row and token are
+created** and the **acceptance flow works**, but **nothing is sent automatically**. The
+admin copies the invite link and shares it manually (e.g. into the building's WhatsApp
+group) — which is exactly the design's intended *"send the magic link via WhatsApp"*
+hand-off.
+
+## What a real implementation plugs into
+
+The orchestrator is built so a real channel is *one module + one switch arm*:
+
+- **Email** — a verified `saken.com` sender (SPF/DKIM/DMARC), an invite-link template, and
+  `delivery_status` transitions `pending → sent → delivered | failed`. Resend is the
+  intended provider.
+- **WhatsApp** — the **WhatsApp Business / Meta Cloud API**. This is item 1 on the
+  [recommended build order](/roadmap/build-order) (2–3 days), because it unblocks both
+  invitations *and* future reminders.
+
+## Automatic reminders — entirely missing
+
+:::warning[No reminder subsystem exists]
+There is **zero** infrastructure for automatic payment reminders (Feature Audit item 3) —
+no scheduler/cron, no reminder delivery service, no due-date tracking, no per-resident
+opt-in. It needs a new subsystem (Vercel cron or a Supabase scheduled job → balance check →
+delivery channel → opt-in prefs). Estimated 5–7 days, and it depends on a working WhatsApp
+channel first. See the [roadmap](/roadmap/missing-features).
+:::

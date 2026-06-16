@@ -1,0 +1,21 @@
+{
+  "name": "saken-docs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Saken — full project documentation",
+  "type": "module",
+  "scripts": {
+    "dev": "vocs dev",
+    "build": "vocs build",
+    "preview": "vocs preview"
+  },
+  "dependencies": {
+    "@vocs/twoslash-rust": "^0.1.0",
+    "mermaid": "^11.15.0",
+    "react": "^19",
+    "react-dom": "^19",
+    "vite": "^8.0.16",
+    "vocs": "^2.0.14",
+    "waku": "1.0.0-beta.1"
+  }
+}

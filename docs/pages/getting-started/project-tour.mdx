@@ -1,0 +1,86 @@
+# Project tour
+
+Where things live across the three repositories.
+
+## `saken` — the web app
+
+```
+saken/
+├── src/
+│   ├── app/                 # Next.js App Router pages & API routes
+│   │   ├── auth/            # /auth, /auth/whatsapp, OAuth callback, signout
+│   │   ├── setup/           # setup wizard (basics → structure → apartments → budget → review)
+│   │   ├── dashboard/       # admin surface (apartments, budget, cash, collections,
+│   │   │                    #   expenses, concierges, treasurers, special-projects, fiscal-year)
+│   │   ├── payments/        # record/edit payments + receipts (+ pre-saken)
+│   │   ├── expenses/        # log/edit expenses (+ pre-saken)
+│   │   ├── resident/        # authenticated resident mirror of the admin views
+│   │   ├── r/[apartmentId]/[token]/   # magic-link resident surface (no login)
+│   │   ├── concierge/       # Arabic RTL concierge surface
+│   │   ├── invite/[token]/  # invitation acceptance landing
+│   │   └── api/             # route handlers: payment receipts, YTD reports (admin/resident/magic-link)
+│   └── lib/                 # business logic (see below)
+├── supabase/
+│   ├── migrations/          # 0001–0047 ordered SQL
+│   ├── functions/send-otp/  # edge function for phone OTP
+│   ├── config.toml          # local Supabase config
+│   └── seed.sql             # (stale — seeding disabled)
+├── docs/                    # design specs, audits, schema docs, prototype
+├── ARCHITECTURE.md          # the 15-entity map, roles, auth, design language
+├── DECISIONS.md             # running log of build-time decisions + rationale
+├── CLAUDE.md                # 256 KB institutional-memory reference
+└── .github/workflows/ci.yml # app + migration-replay + gated migration deploy
+```
+
+### The `src/lib` modules
+
+`src/lib` is where the money math and server actions live. The major modules:
+
+| Module | Responsibility |
+| --- | --- |
+| `auth/` | identity resolution, `requireUser`, `resolve*ComplexId` per role, post-sign-in routing |
+| `invitations/` | `createInvitation`, token generate/validate, delivery orchestrator (email/whatsapp) |
+| `membership/` | active-complex switching, exit/delete community |
+| `setup/` | wizard `useEnsure*` hooks (complex, building, apartment, resident, budget line) |
+| `budget-lines/` · `budget-versions/` | line resolution, immutable version snapshots + diff |
+| `payments/` · `expenses/` | record/edit actions, receipt-photo upload + client downscale, pre-Saken anchors |
+| `special-projects/` | one-off project CRUD + contributions |
+| `concierge/` · `admin-submissions/` | submission flow + approval queue |
+| `fiscal/` | fiscal-year resolution, rollover actions (RPC) |
+| `reports/` | YTD + receipt PDF rendering (`@react-pdf/renderer`) |
+| `money/` · `pre-saken/` | apartment-row math, anchored-cash math (with unit tests) |
+| `i18n/` | Arabic strings + formatting for the concierge surface |
+| `supabase/` | client factories: browser, server (cookie), service-role; generated DB types |
+
+## `saken-server` — the standalone backend
+
+```
+saken-server/   (repo) / saken-backend/ (local dir)
+└── src/
+    ├── config/        env validation (zod)
+    ├── supabase/      per-request user (RLS) client + service-role + anon
+    ├── auth/          JwtAuthGuard, ResidentTokenGuard, AuthContextService
+    ├── domain/        shared enums + the 10 category keys
+    ├── summary/ budget/ fiscal/ payments/ expenses/ concierge/
+    ├── admin-submissions/ special-projects/ invitations/ account/ setup/
+    └── reports/ resident/ health/
+```
+
+A NestJS API that mirrors the web app's server actions so the web app can migrate to it
+incrementally (strangler pattern) and a future React Native app can build against it. See
+[Backend & MCP](/architecture/backend).
+
+## `saken-mcp` — the MCP server
+
+```
+saken-mcp/
+└── src/
+    ├── index.ts    # MCP server bootstrap (stdio)
+    ├── config.ts   # SAKEN_API_URL + SAKEN_ACCESS_TOKEN
+    ├── api.ts      # thin HTTP client for saken-server
+    └── tools.ts    # 15 registered tools
+```
+
+A Model Context Protocol server that exposes Saken to LLM clients (Claude Desktop, Claude
+Code). It is a **client of `saken-server`**, not a direct DB connection. See
+[saken-mcp tools](/api/mcp-tools).

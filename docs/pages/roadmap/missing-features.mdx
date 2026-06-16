@@ -1,0 +1,75 @@
+# Missing features
+
+Saken is a pilot MVP, and several capabilities — some advertised, some always-planned —
+are not built. This page is the consolidated list, drawn from the **2026-06-16 Feature
+Audit**, the **2026-06-14 project audit**, and the v1 design spec's own v2 backlog.
+
+## The headline gaps (from the feature audit)
+
+| Gap | Status | Effort | Notes |
+| --- | --- | --- | --- |
+| **Real WhatsApp delivery** | 🔴 Missing | 2–3 days | Phone OTP exists; there is no WhatsApp Business / Meta Cloud API. Unblocks invitations *and* reminders. |
+| **Monthly collection targets** | 🟡 Partial | 3–5 days | Annual budget-vs-actual is live; no monthly tracking/targets/calendar. |
+| **Automatic payment reminders** | 🔴 Missing | 5–7 days | No scheduler, delivery, due-date tracking, or opt-in. Depends on WhatsApp. |
+| **Transfer admin/treasurer role** | 🔴 Missing | — | No hand-off / promote / demote flow; revoke + re-invite only. |
+| **General UI/UX polish** | 🟠 Rough edges | — | See the list below. Needs a specific scope from the client. |
+
+The other six audit items (invitations pipeline, role stacking, non-resident admin/
+treasurer access, treasurer UI recognition) are **done** — see [Status](/introduction/status).
+
+## Known UI/UX rough edges (audit item 9)
+
+- A resident cash-balance display regression (a deferred "Batch 5b" item).
+- Edit-then-back returns to the dashboard, not the detail page (a navigation
+  discontinuity).
+- Asymmetric pre-Saken back-arrow placement.
+- Dead-code clutter in places.
+- Numeric-input "empty stays empty" inconsistency.
+- Timezone inconsistency (browser-local vs. a hardcoded `Asia/Beirut`).
+- **No PWA manifest** — despite Saken being pitched as an installable PWA.
+
+## Engineering debt (from the project audit)
+
+None of these block the pilot; address before scaling past a handful of buildings:
+
+| Item | What |
+| --- | --- |
+| **H-P1** | Money aggregations pull every row into JS — should be SQL aggregates (`get_complex_financials` RPC) |
+| **M-P1** | No pagination on `/payments`, `/expenses`, `/resident/expenses/all` |
+| **M-P3** | Sequential dashboard fetches that could be `Promise.all`'d |
+| **M-P4** | Synchronous, uncapped PDF generation |
+| **M-C1** | Admin/resident detail pages are near-verbatim clones (drift risk) |
+| **M-C4** | "Payments" (code) vs "Collections" (UI) naming split |
+| **M-S2** | `apartments.share ≤ 1000` cap contradicts the relative-weights model |
+| **M-S4** | Dead columns + dead tables to drop in one cleanup migration |
+| **M-OPS1** | Single-admin delete model; storage-orphan cleanup; no Sentry |
+
+Several **higher-severity** audit items were already fixed after it was written (phone
+uniqueness, the `roles_readable` leak, empty-string identity, the missing test suite, the
+untyped client) — see [Status](/introduction/status).
+
+## Pre-pilot hardening backlog
+
+`docs/pre-pilot-hardening.md` (34 KB) tracks finer items — receipt-photo EXIF handling,
+view-token rotation UI, email deliverability, and more. Many were addressed during the
+build; the rest are pilot-or-post-pilot.
+
+## v2 backlog (from the design spec)
+
+Parked from v1 by design: password auth, a configurable late-payer flag, per-building
+category management, tenant-vs-owner modelling, custom date-range PDF reports, push/in-app
+notifications, voting/decision logs, in-app announcements/chat, **online payments / bank
+integration**, multi-currency (LBP), system-calculated late fees, year-over-year comparison
+reports, and an Arabic UI for residents/admins.
+
+## Open clarifications for the client
+
+The feature audit flagged questions that need answers before some items can be actioned:
+
+- Item 7 was truncated in the client's doc (*"Tag and recognise treasurer role within
+  ___"*) — confirm what was meant.
+- Item 9 ("Fix flows, UI/UX") is too broad — needs a specific list of problem pages.
+- Monthly targets: auto-derived (annual ÷ 12) or admin-configurable per month?
+- Reminder cadence: monthly? N days before due? Per-resident configurable?
+
+Next: [Recommended build order](/roadmap/build-order).

@@ -1,0 +1,73 @@
+# Apartments & residents
+
+Apartments are created in the setup wizard and managed afterwards from the dashboard. A
+resident is a person assigned to an apartment via the `current_user_id` pointer.
+
+## Creating apartments
+
+The setup wizard's apartment step (`/setup/apartments`) **auto-generates** the grid from
+the building structure you entered (floors × apartments per floor, plus any villas). Each
+row is then completed inline. The wizard uses `useEnsure*` hooks
+(`src/lib/setup/use-ensure-apartment.ts`, `use-ensure-resident.ts`, etc.) that idempotently
+insert or update rows as you edit, with autosave.
+
+Fields per apartment: **label** (required, unique in its building), **resident name**,
+**phone**, **email**, **share**, and **opening balances**.
+
+## Managing apartments
+
+`/dashboard/apartments` lists every unit with its status, balance, and an **Edit** action.
+`/dashboard/apartments/[id]` is the per-apartment detail. The shares running total shows
+at the top so an admin can see whether the entered weights look right.
+
+:::info[Resident name dedup is by normalized name]
+When an admin types a resident name that matches an existing resident (case-insensitively)
+in the same complex, the apartment **relinks** to that existing user rather than creating a
+duplicate (DECISIONS log, 2026-05-17). The **originally-typed casing wins** — a later
+re-typing with different casing doesn't overwrite the stored name. Renaming a resident on a
+row **forks** to a new (or matching) user rather than propagating the rename across all
+their apartments; global rename is deferred to a future user-management UI.
+:::
+
+## Residents
+
+A resident is simply a `users` row that some apartment's `current_user_id` points at — not
+a `roles` entry (see [Roles & role stacking](/concepts/roles)). Residents access Saken via
+a magic link; they never sign in.
+
+Two resident surfaces exist:
+
+- **Magic-link, no login** — `/r/{apartmentId}/{token}`, validated against
+  `apartments.view_token`.
+- **Authenticated mirror** — `/resident/*`, used when a resident also has an authenticated
+  identity (e.g. they're a role-stacked treasurer). These routes are near-verbatim clones
+  of the admin detail pages, differing only in auth/fetch wiring (audit M-C1 flags the
+  clone as drift risk).
+
+A resident sees: their own apartment (*"You owe $X"*, payment history), special
+collections relevant to them, every other apartment's status (label + name + paid/owes/
+ahead), and the community summary (cash, budget, collected %). They cannot write anything.
+
+## Sharing the access link
+
+From the apartments list, **Share link** opens a sheet: a WhatsApp target (active if a
+phone is on file), a copy-link fallback, and regenerate. Because automated delivery is
+stubbed, **copy-link + paste into WhatsApp** is the working path today.
+
+:::warning[Link permanence]
+A resident's `view_token` is permanent and **survives apartment reassignment**
+(DECISIONS log, 2026-05-22). There is no rotation UI in v1; rotate via a direct DB
+`UPDATE` if a link leaks.
+:::
+
+## The `apartments` table
+
+| Column | Notes |
+| --- | --- |
+| `building_id` | FK → buildings, `ON DELETE CASCADE` |
+| `label` | `UNIQUE(building_id, label)` |
+| `share` | `NUMERIC(10,2)`, `CHECK 0–1000` (legacy cap) |
+| `opening_carryover_balance` | signed carryover (owes `+`, ahead `−`) |
+| `current_user_id` | the assigned resident, `ON DELETE SET NULL` |
+| `view_token` | `UUID`, the resident magic-link credential |
+| `opening_paid_amount` | **legacy / zeroed** since migration `0012` |

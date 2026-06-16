@@ -1,0 +1,85 @@
+# Changelog
+
+A month-grouped summary of Saken's `saken` repository history. The project began in **May
+2026** (216 commits to date). This is a curated highlight reel — the full, exact history is
+in `git log`; representative commit hashes are shown.
+
+:::info[How this was assembled]
+Distilled from
+`git -C saken log --pretty=format:'%h | %ad | %s' --date=short`, grouped by month and
+theme. The web app deploys to Vercel on every push, so each entry shipped roughly when it
+landed.
+:::
+
+## June 2026 — hardening, CI/CD, and a security pass
+
+The month the project matured from "feature-complete" toward "operable."
+
+- **CI/CD pipeline** — GitHub Actions with `app` + `migration-replay` + a gated
+  prod-migration deploy (`07c54bc`, `31ec48a`). The replay job replays all migrations from
+  scratch to catch drift.
+- **Typed Supabase layer + a Vitest unit suite** (`b09441f`) — closing the audit's two
+  biggest engineering gaps (H-C1, H-C2) in one PR.
+- **Security fixes** — dropped the anon-readable `roles_readable` PII-leak view
+  (`fe25f53`, migration `0047`); forbade empty-string email/phone identity collisions
+  (`cf193a3`, `0045`); claim-placeholder-identity-on-first-sign-in to fix the dual-row root
+  cause (`db708a1`).
+- **Phone OTP authentication** with full RLS support (`d471200`), hidden behind
+  `NEXT_PUBLIC_PHONE_AUTH_ENABLED` (`7719b68`); `uniq_authenticated_phone` (migration
+  `0044`).
+- **Official PDF payment receipts** (`00ac522`).
+- **Auth routing hardening** — fixed a Safari redirect loop and switched user lookups to
+  the service-role client for robustness (`b186f67`, `c62b571`).
+
+## May 2026 — from zero to feature-complete
+
+The bulk of the build (139 commits). Roughly in order:
+
+### Foundation & the setup wizard
+- Initial Next.js + Supabase scaffold (`34809b6`, 2026-05-09); the 15-table schema and
+  foundation.
+- The 5-step **setup wizard** — basics, structure, apartments grid, budget — wired end to
+  end (steps 15e–15f, `135a8b6`, `a522d3d`).
+- Landing page with brand hero (`b8bc6df`).
+
+### The core money loop
+- **Dashboard** rework — card grid + apartment-contributions list + detail pages for cash,
+  budget, collections, expenses (`d721aed`→`c2967c5`).
+- **Payments** — recording, receipts, edit, soft-delete (`8e2956b`→`1f05641`).
+- **Expenses** — logging, receipt-photo upload with client-side downscaling, edit/delete
+  (`a71d9db`→`1f05641`).
+- **YTD PDF reports** — backend generation + UI wire-up (`27c2b19`, `ccbf6a9`).
+- The **Σ-shares** money model and opening-cash date anchor (`5e976eb`, `64e291e`).
+- **10-category** budget/expense overhaul (`4963145`, migration `0009`).
+
+### Roles, residents, and the concierge
+- **Resident** magic-link view + read-only parity routes (`6ec3b28`→`6d1c70e`).
+- **Invitations + identity refactor** — the `roles` table split residency from roles,
+  `accept_invitation` RPC, management UIs (`a97288c`→`77fa614`, migrations `0016`–`0021`).
+- **Concierge** surface — Arabic RTL submission flow + admin approval queue + native-review
+  gate (`7952834`→`22636dc`).
+- Real **RLS policies** for admin/concierge/resident (`9446f0a`, `3121da4`, migrations
+  `0023`/`0024`).
+
+### Treasurer, fiscal year, special projects
+- **Treasurer** role — new role, RLS, routing, UI, invite, as a full vertical (`3dbb304`,
+  migration `0025`).
+- **Fiscal-year rollover** — close/open, carry snapshots, budget copy, "Path C" date
+  pinning, past-year viewing (`f62974e`→`c325ee3`, migrations `0027`–`0031`).
+- **Special projects** — schema, CRUD, contributions, close + history (`8f0db5f`→`d434362`,
+  migration `0015` line-tagging).
+- **Budget version history** — immutable snapshots + diff (`8ce5786`, `7e85649`).
+- **Multi-community** — `active_complex_id`, active-aware helpers, community switcher,
+  exit/delete community (`0636256`→`6007cd0`, migrations `0033`–`0042`).
+
+## Companion repos
+
+- **`saken-server`** (NestJS backend) and **`saken-mcp`** (MCP server) were created
+  mid-June 2026 as the multi-client tier and the LLM integration, respectively. See
+  [Backend & MCP](/architecture/backend).
+
+:::tip[Reading the real history]
+For the exact, complete log:
+`git -C saken log --pretty=format:'%h | %ad | %s' --date=short`. Commits are batched and
+descriptively named, so the log itself reads as a detailed build diary.
+:::

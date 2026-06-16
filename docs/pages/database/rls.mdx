@@ -1,0 +1,74 @@
+# RLS policies
+
+Row-Level Security is Saken's authorization spine. The live database runs **52 policies
+across 15 tables**, with RLS **enabled on all 18 tables** (3 of them deny-by-default).
+
+## How a policy decides
+
+Policies are keyed off the caller's identity through the `current_*_complex_id()` helper
+functions (see [Auth & RLS wiring](/architecture/auth-rls)). A representative shape:
+
+```sql
+-- admins can do anything within their own complex
+CREATE POLICY expenses_admin_all ON public.expenses
+  FOR ALL
+  USING (complex_id = current_admin_complex_id())
+  WITH CHECK (complex_id = current_admin_complex_id());
+```
+
+Read-only roles (resident, treasurer-where-read-only) get `FOR SELECT` policies; concierge
+gets narrow insert/select on their own submissions; treasurer gets write on `payments` and
+`expenses`.
+
+## Per-role intent
+
+| Role | Can read | Can write |
+| --- | --- | --- |
+| **Admin** | everything in their complex | everything in their complex |
+| **Treasurer** | the complex's financials | `payments`, `expenses` (+ approve submissions) |
+| **Resident** | their apartment, the complex summary, every apartment's status | nothing |
+| **Concierge** | their own submitted expenses | create/edit their own pending submissions |
+
+These were filled in progressively as each feature shipped (the build plan's *"write RLS
+as you build each feature, not all at the end"* discipline): admin + concierge policies in
+migration `0023`, resident in `0024`, treasurer in `0025`, storage policies in `0026`.
+
+## Deny-by-default tables
+
+Three tables have RLS **enabled with zero policies**, so all access is denied except via
+service-role:
+
+- `magic_links` (dead — superseded by `apartments.view_token`)
+- `apartment_closing_balances` (dead — superseded by `fiscal_year_apartment_carries`)
+- `fiscal_year_apartment_carries` (live, but read only via service-role)
+
+An untracked `rls_auto_enable()` event trigger in production auto-enables RLS on any new
+table (a common Supabase safety pattern) — which is *why* `fiscal_year_apartment_carries`
+got RLS without an explicit statement. It's benign but should be captured in a migration
+for reproducibility.
+
+## Storage
+
+Receipt photos live in the `expense-receipts` Storage bucket; access is governed by storage
+RLS policies added for treasurer and concierge in migration `0026`. Signed URLs have a
+**1-hour TTL** across surfaces (audit L-A3 — fine for the pilot; shorten if receipts are
+sensitive).
+
+## Confirmed healthy (from the live-DB reconciliation)
+
+The 2026-06-14 introspection confirmed the live policy set is coherent with the app:
+
+- All 10 functions/RPCs are `service_role`-owned, `SECURITY DEFINER`, `search_path=''`.
+- `service_role` table grants match the RPCs' needs — and **no `DELETE` is granted
+  anywhere**, consistent with soft-delete-only.
+- Every consistency `CHECK` is intact (`payments_special_collection_consistency`,
+  `expenses_approved_has_approver`, `expenses_rejected_has_reason`,
+  `fiscal_years_archived_has_closure`, all `amount > 0`).
+- The `special_collections` policies are real (not the old stub) — the boundary *is*
+  DB-enforced (a stale code comment had claimed otherwise).
+
+:::tip[Defense-in-depth]
+RLS is the bottom layer. Server actions also re-derive identity and scope-check
+client-supplied IDs *before* the DB (see [Auth & RLS wiring](/architecture/auth-rls)), so
+the two layers back each other up.
+:::
