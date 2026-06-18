@@ -154,6 +154,7 @@ export default defineConfig({
     {
       text: 'Reference',
       items: [
+        { text: 'Arabic translation glossary', link: '/reference/i18n-glossary' },
         { text: 'Changelog', link: '/changelog' },
         { text: 'About this site', link: '/about' },
       ],

@@ -1,0 +1,988 @@
+# Arabic translation glossary (i18n)
+
+Exact English → Arabic pairing for **every** localized string in the Saken
+web app (`saken`). This is a review/reference artifact — it documents the
+translations; it is **not** a translation of this docs site.
+
+:::warning[AI first pass — pending native review]
+The Arabic below is an AI-generated first pass (Levantine/Lebanese), tagged
+`"_status": "ai-pending-native-review"` in each `messages/ar/*.json`. A native
+Lebanese speaker should review it before Arabic is exposed to real users.
+:::
+
+**Source:** `saken/messages/<en|ar>/<namespace>.json` (next-intl catalogs),
+paired by key. **How the app picks a locale:** per-user, via a `saken-locale`
+cookie (no URL routing); `users.language` is the source of truth.
+
+**16 namespaces · 837 strings · 0 missing Arabic.**
+
+| Namespace | Strings | Scope |
+| --- | --- | --- |
+| [`auth`](#auth-57-strings) | 57 | Sign-in, email/WhatsApp, welcome, no-community, community-removed. |
+| [`categories`](#categories-20-strings) | 20 | The 10 budget/expense categories — labels + helper descriptions. |
+| [`common`](#common-36-strings) | 36 | Shared chrome: nav, settings menu, role labels, exit/delete dialogs. |
+| [`components`](#components-187-strings) | 187 | Shared display components (summary cards, tables, special-projects bars, management rows). |
+| [`concierge`](#concierge-45-strings) | 45 | Concierge surface (submission list, form, status banners). |
+| [`dashboard`](#dashboard-65-strings) | 65 | Admin dashboard + all detail pages (cash, budget, collections, expenses, apartments, residents, concierges, treasurers, concierge-submissions). |
+| [`expenseForm`](#expenseForm-30-strings) | 30 | The shared expense form (admin + concierge). |
+| [`expenses`](#expenses-36-strings) | 36 | Admin expenses pages (list, receipt, new, edit, pre-Saken). |
+| [`fiscalYear`](#fiscalYear-48-strings) | 48 | Fiscal-year page + rollover confirmation. |
+| [`invitations`](#invitations-14-strings) | 14 | Invite landing + accept flow. |
+| [`months`](#months-12-strings) | 12 | Month names (Levantine, not MSA/Gulf). |
+| [`paymentForm`](#paymentForm-23-strings) | 23 | The shared collection/payment form. |
+| [`payments`](#payments-42-strings) | 42 | Admin collections pages (list, receipt, new, edit, pre-Saken). |
+| [`resident`](#resident-106-strings) | 106 | Resident + magic-link surfaces. |
+| [`setup`](#setup-95-strings) | 95 | The 6-step setup wizard. |
+| [`specialProjects`](#specialProjects-21-strings) | 21 | Special-projects pages (list, detail, record, history). |
+
+---
+
+## `auth` — 57 strings
+
+Sign-in, email/WhatsApp, welcome, no-community, community-removed.
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `signIn.back` | Back | رجوع |
+| `signIn.heading` | Continue with | تابع باستخدام |
+| `signIn.subtitle` | If you're new, we'll set up your account. If you have one, you'll be signed in. | إذا كنت جديداً، رح نجهّزلك حسابك. وإذا عندك حساب، رح يتم تسجيل دخولك. |
+| `signIn.continueGoogle` | Continue with Google | تابع باستخدام Google |
+| `signIn.signingIn` | Signing in... | عم يتم تسجيل الدخول... |
+| `signIn.continueEmail` | Continue with email | تابع بالإيميل |
+| `signIn.continuePhone` | Continue with phone | تابع برقم الهاتف |
+| `signIn.terms` | By continuing, you agree to Saken's &lt;terms&gt;terms of service&lt;/terms&gt; and &lt;privacy&gt;privacy policy&lt;/privacy&gt;. | بمتابعتك، إنت موافق على &lt;terms&gt;شروط الخدمة&lt;/terms&gt; و&lt;privacy&gt;سياسة الخصوصية&lt;/privacy&gt; تبع Saken. |
+| `email.back` | Back | رجوع |
+| `email.heading` | Continue with email | تابع بالإيميل |
+| `email.subtitle` | We'll email you a sign-in link. Tap it to continue — no password needed. | رح نبعتلك رابط تسجيل دخول عالإيميل. اضغط عليه لتتابع — بدون كلمة سر. |
+| `email.label` | Email address | عنوان الإيميل |
+| `email.send` | Send sign-in link | ابعت رابط تسجيل الدخول |
+| `email.sending` | Sending... | عم يتم الإرسال... |
+| `email.sentHeading` | Check your inbox | تفقّد صندوق الوارد |
+| `email.sentBody` | We sent a sign-in link to &lt;addr&gt;&#123;email&#125;&lt;/addr&gt;. Tap the link to continue. You can close this tab. | بعتنا رابط تسجيل الدخول لـ &lt;addr&gt;&#123;email&#125;&lt;/addr&gt;. اضغط عالرابط لتتابع. فيك تسكّر هالصفحة. |
+| `email.terms` | By continuing, you agree to Saken's &lt;terms&gt;terms of service&lt;/terms&gt; and &lt;privacy&gt;privacy policy&lt;/privacy&gt;. | بمتابعتك، إنت موافق على &lt;terms&gt;شروط الخدمة&lt;/terms&gt; و&lt;privacy&gt;سياسة الخصوصية&lt;/privacy&gt; تبع Saken. |
+| `whatsapp.back` | Back | رجوع |
+| `whatsapp.heading` | Continue with phone | تابع برقم الهاتف |
+| `whatsapp.subtitle` | We'll send a verification code to your phone number. Enter it to continue — no password needed. | رح نبعتلك رمز تحقق على رقم هاتفك. أدخله لتتابع — بدون كلمة سر. |
+| `whatsapp.nameLabel` | Your name | اسمك |
+| `whatsapp.namePlaceholder` | e.g. Nabil Katicha | مثلاً نبيل قطيشا |
+| `whatsapp.phoneLabel` | Phone number | رقم الهاتف |
+| `whatsapp.phonePlaceholder` | +961 71 123 456 | +961 71 123 456 |
+| `whatsapp.phoneHint` | Include your country code (e.g. +961 for Lebanon) | حطّ رمز البلد (مثلاً +961 للبنان) |
+| `whatsapp.sendCode` | Send verification code | ابعت رمز التحقق |
+| `whatsapp.sending` | Sending... | عم يتم الإرسال... |
+| `whatsapp.sentTo` | We sent a 6-digit code to &lt;num&gt;&#123;phone&#125;&lt;/num&gt;. &lt;change&gt;Change number&lt;/change&gt; | بعتنا رمز من 6 أرقام لـ &lt;num&gt;&#123;phone&#125;&lt;/num&gt;. &lt;change&gt;غيّر الرقم&lt;/change&gt; |
+| `whatsapp.otpLabel` | Verification code | رمز التحقق |
+| `whatsapp.otpPlaceholder` | 123456 | 123456 |
+| `whatsapp.verify` | Verify | تحقّق |
+| `whatsapp.verifying` | Verifying... | عم يتم التحقق... |
+| `whatsapp.verified` | Signed in — redirecting... | تم تسجيل الدخول — عم نحوّلك... |
+| `whatsapp.resendIn` | Resend code in &#123;seconds&#125;s | إعادة إرسال الرمز خلال &#123;seconds&#125; ثانية |
+| `whatsapp.resend` | Resend code | إعادة إرسال الرمز |
+| `whatsapp.terms` | By continuing, you agree to Saken's &lt;terms&gt;terms of service&lt;/terms&gt; and &lt;privacy&gt;privacy policy&lt;/privacy&gt;. | بمتابعتك، إنت موافق على &lt;terms&gt;شروط الخدمة&lt;/terms&gt; و&lt;privacy&gt;سياسة الخصوصية&lt;/privacy&gt; تبع Saken. |
+| `welcome.residentHeading` | You're a resident of &#123;community&#125;. | إنت ساكن في &#123;community&#125;. |
+| `welcome.residentBody` | Your community dashboard is read-only — open it any time to see what's collected, what's spent, and where things stand. | لوحة مبناك للعرض بس — افتحها بأي وقت لتشوف شو انجمع، شو انصرف، ووين صار الوضع. |
+| `welcome.residentCta` | Open the &#123;community&#125; dashboard | افتح لوحة &#123;community&#125; |
+| `welcome.treasurerHeading` | You're a treasurer of &#123;community&#125;. | إنت أمين صندوق في &#123;community&#125;. |
+| `welcome.treasurerBody` | You can record expenses and collections, and review concierge submissions. Community settings stay with the admin. | فيك تسجّل مصاريف وتحصيلات، وتراجع طلبات الناطور. إعدادات المبنى بتضل عند الإدارة. |
+| `welcome.treasurerCta` | Open the &#123;community&#125; dashboard | افتح لوحة &#123;community&#125; |
+| `welcome.conciergeBody` | You're signed in with concierge access. | إنت مسجّل دخول بصلاحية الناطور. |
+| `welcome.conciergeCta` | Open your concierge tools | افتح أدوات الناطور |
+| `welcome.noCommunityHeading` | You're signed in. | إنت مسجّل دخول. |
+| `welcome.noCommunityBody` | You aren't part of a community yet. If you were invited, ask your admin to send your invite link again. | لسا ما إنت جزء من مبنى. إذا اندعيت، اطلب من الإدارة تبعتلك رابط الدعوة مرة تانية. |
+| `welcome.tryAgain` | Try again | جرّب مرة تانية |
+| `welcome.signOut` | Sign out | تسجيل الخروج |
+| `noCommunity.heading` | You're not part of any community right now. | لسا ما إنت جزء من أي مبنى هلق. |
+| `noCommunity.body` | Create a new community to get started — or if you were invited, ask your admin for your invite link. | أنشئ مبنى جديد لتبلّش — أو إذا اندعيت، اطلب من الإدارة رابط الدعوة تبعك. |
+| `noCommunity.createCommunity` | Create a community | أنشئ مبنى |
+| `noCommunity.signOut` | Sign out | تسجيل الخروج |
+| `communityRemoved.headingWithName` | &lt;n&gt;&#123;name&#125;&lt;/n&gt; was deleted by the admin. | &lt;n&gt;&#123;name&#125;&lt;/n&gt; انحذف من قبل الإدارة. |
+| `communityRemoved.headingGeneric` | Your previous community was deleted. | مبناك السابق انحذف. |
+| `communityRemoved.body` | It's no longer available. If you have access to other communities, continue to see them. | ما عاد متوفّر. إذا عندك صلاحية على مباني تانية، تابع لتشوفها. |
+| `communityRemoved.continue` | Continue | تابع |
+| `communityRemoved.signOut` | Sign out | تسجيل الخروج |
+
+## `categories` — 20 strings
+
+The 10 budget/expense categories — labels + helper descriptions.
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `labels.concierge` | Concierge | الناطور |
+| `labels.utilities` | Utilities | كهرباء وماء |
+| `labels.maintenance_repair` | Maintenance & Repair | الصيانة والإصلاح |
+| `labels.facility_services` | Facility Services | خدمات المبنى |
+| `labels.property_insurance` | Property Insurance | تأمين العقار |
+| `labels.property_tax` | Property Tax | ضريبة العقار |
+| `labels.security` | Security | الأمن |
+| `labels.administrative` | Administrative | إدارية |
+| `labels.contingency` | Contingency | الاحتياطي |
+| `labels.miscellaneous` | Miscellaneous | متفرقات |
+| `descriptions.concierge` | Salary, license renewal, insurance, etc. | راتب الناطور، تجديد الرخصة، التأمين، إلخ. |
+| `descriptions.utilities` | Electricity bill, diesel for generators, water bill or truck deliveries, etc. | فاتورة الكهرباء، مازوت المولّد، فاتورة المياه أو صهاريج المياه، إلخ. |
+| `descriptions.maintenance_repair` | Elevator servicing, generator, Common Area Maintenance (CAM), etc. | صيانة المصعد، المولّد، صيانة المساحات المشتركة، إلخ. |
+| `descriptions.facility_services` | Landscaping, pest control, cleaning, etc. | تنسيق الحدائق، مكافحة الحشرات، التنظيف، إلخ. |
+| `descriptions.property_insurance` | Coverage for the physical structure, fire, liability, etc. | تأمين هيكل المبنى، الحريق، المسؤولية، إلخ. |
+| `descriptions.property_tax` | State or municipal taxes, etc. | ضرائب الدولة أو البلدية، إلخ. |
+| `descriptions.security` | On-site guards, security systems, fire suppression inspections, etc. | حراس في الموقع، أنظمة الأمن، فحوصات أنظمة الإطفاء، إلخ. |
+| `descriptions.administrative` | Property management fees, legal fees, accounting services, etc. | أتعاب إدارة العقار، الأتعاب القانونية، الخدمات المحاسبية، إلخ. |
+| `descriptions.contingency` | Unforeseen, non-recurring operational expenses and emergency repairs, etc. | مصاريف غير متوقعة وغير متكررة وإصلاحات طارئة، إلخ. |
+| `descriptions.miscellaneous` | Other miscellaneous operational expenses. | مصاريف تشغيلية متفرقة أخرى. |
+
+## `common` — 36 strings
+
+Shared chrome: nav, settings menu, role labels, exit/delete dialogs.
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `back` | Back | رجوع |
+| `backChevron` | ‹ | › |
+| `footer` | Saken — saken.com | Saken — saken.com |
+| `optional` | (optional) | (اختياري) |
+| `settings` | Settings | الإعدادات |
+| `signOut` | Sign out | تسجيل الخروج |
+| `language` | Language | اللغة |
+| `english` | English | English |
+| `arabic` | العربية | العربية |
+| `communities` | Communities | المباني |
+| `createCommunity` | Create new community | إنشاء مبنى جديد |
+| `editCommunity` | Edit community | تعديل المبنى |
+| `editApartments` | Edit apartments | تعديل الشقق |
+| `residents` | Residents | السكان |
+| `concierges` | Concierges | النواطير |
+| `treasurers` | Treasurers | أمناء الصندوق |
+| `fiscalYear` | Fiscal year | السنة المالية |
+| `reports` | Reports | التقارير |
+| `reportsGenerating` | Generating… | جاري الإنشاء… |
+| `notApplicable` | — | — |
+| `roles.admin` | admin | مدير |
+| `roles.concierge` | concierge | ناطور |
+| `roles.treasurer` | treasurer | أمين صندوق |
+| `roles.resident` | resident | ساكن |
+| `exit.label` | Exit community | الخروج من المبنى |
+| `exit.confirm` | Leave &#123;name&#125;? You'll lose access unless you're re-invited. | هل تريد الخروج من &#123;name&#125;؟ ستفقد الوصول ما لم تتم دعوتك مجدداً. |
+| `exit.cancel` | Cancel | إلغاء |
+| `exit.confirmButton` | Leave | خروج |
+| `exit.errorGeneric` | Could not leave the community. Please try again. | تعذّر الخروج من المبنى. حاول مجدداً. |
+| `delete.label` | Delete community | حذف المبنى |
+| `delete.title` | Delete &#123;name&#125;? | حذف &#123;name&#125;؟ |
+| `delete.body` | This removes it for ALL members and can't be undone. Type the community name to confirm. | سيؤدي هذا إلى حذفه لجميع الأعضاء ولا يمكن التراجع عنه. اكتب اسم المبنى للتأكيد. |
+| `delete.inputAria` | Type the community name to confirm deletion | اكتب اسم المبنى لتأكيد الحذف |
+| `delete.cancel` | Cancel | إلغاء |
+| `delete.confirmButton` | Delete | حذف |
+| `delete.errorGeneric` | Could not delete the community. Please try again. | تعذّر حذف المبنى. حاول مجدداً. |
+
+## `components` — 187 strings
+
+Shared display components (summary cards, tables, special-projects bars, management rows).
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `summary.communityBasics` | Community basics | أساسيات المجمّع |
+| `summary.name` | Name | الاسم |
+| `summary.fiscalYear` | Fiscal year | السنة المالية |
+| `summary.cashOnHand` | Cash on hand | النقد المتوفّر |
+| `summary.buildingsAndApartments` | Buildings and apartments | المباني والشقق |
+| `summary.annualBudget` | Annual budget | الموازنة السنوية |
+| `summary.expensesToDate` | Expenses to date | المصاريف لتاريخه |
+| `summary.specialProjects` | Special projects | المشاريع الخاصة |
+| `summary.noActiveSpecialProjects` | No active special projects. | ما في مشاريع خاصة فعّالة. |
+| `summary.viewPastProjects` | View past projects → | عرض المشاريع السابقة ← |
+| `apartmentContribution.owes` | Owes &#123;amount&#125; | عليه &#123;amount&#125; |
+| `apartmentContribution.ahead` | Ahead &#123;amount&#125; | مقدّم &#123;amount&#125; |
+| `apartmentContribution.paidUp` | Paid up | مسدّد |
+| `apartmentContribution.titleWithName` | Apt &#123;label&#125; — &#123;name&#125; | شقة &#123;label&#125; — &#123;name&#125; |
+| `apartmentContribution.titleNoName` | Apt &#123;label&#125; | شقة &#123;label&#125; |
+| `apartmentContribution.annualPaid` | Annual &#123;due&#125; · Paid &#123;paid&#125; | السنوي &#123;due&#125; · المدفوع &#123;paid&#125; |
+| `apartmentDetail.basics` | Basics | الأساسيات |
+| `apartmentDetail.resident` | Resident | الساكن |
+| `apartmentDetail.share` | Share | الحصّة |
+| `apartmentDetail.phone` | Phone | الهاتف |
+| `apartmentDetail.email` | Email | البريد الإلكتروني |
+| `apartmentDetail.collectionSnapshot` | Collection snapshot | ملخّص التحصيل |
+| `apartmentDetail.due` | Due | المستحق |
+| `apartmentDetail.remaining` | Remaining | المتبقّي |
+| `apartmentDetail.carry` | Carry | المرحّل |
+| `apartmentDetail.paid` | Paid | المدفوع |
+| `apartmentDetail.collectionHistory` | Collection history | سجلّ التحصيل |
+| `apartmentDetail.noCollections` | No collections recorded yet. | ما في تحصيلات مسجّلة بعد. |
+| `apartmentDetail.receiptLine` | #&#123;number&#125; · &#123;date&#125; | رقم &#123;number&#125; · &#123;date&#125; |
+| `budgetHistory.creatorTimestamp` | &#123;name&#125; · &#123;timestamp&#125; | &#123;name&#125; · &#123;timestamp&#125; |
+| `budgetHistory.moreChanges` | + &#123;count&#125; more &#123;count, plural, one &#123;change&#125; other &#123;changes&#125;&#125; | + &#123;count&#125; &#123;count, plural, one &#123;تعديل إضافي&#125; other &#123;تعديلات إضافية&#125;&#125; |
+| `budgetHistory.fullSnapshot` | Full budget snapshot at this version | الموازنة الكاملة عند هالنسخة |
+| `expenseListRow.categoryWithLine` | &#123;category&#125; · &#123;line&#125; | &#123;category&#125; · &#123;line&#125; |
+| `expenseListRow.hasPhotoLabel` | Has photo | في صورة |
+| `autosave.saving` | Saving… | عم يُحفظ… |
+| `autosave.saved` | Saved ✓ | انحفظ ✓ |
+| `autosave.couldntSave` | Couldn't save — | ما قدرنا نحفظ — |
+| `autosave.retry` | retry | إعادة المحاولة |
+| `downloadReceipt.generating` | Generating… | عم يُجهّز… |
+| `downloadReceipt.download` | Download PDF receipt | تنزيل إيصال PDF |
+| `downloadReceipt.error` | Could not generate the PDF. Please try again. | ما قدرنا نجهّز الـ PDF. جرّب مرة تانية. |
+| `share.linkCopied` | Link copied | اننسخ الرابط |
+| `share.shareLink` | Share link | مشاركة الرابط |
+| `share.assignResidentTooltip` | Assign a resident to share a link. | عيّن ساكن حتى تقدر تشارك الرابط. |
+| `wizardBack.back` | Back | رجوع |
+| `signOut.signOut` | Sign out | تسجيل الخروج |
+| `fiscalYearBadge.viewingPastYear` | Viewing past year · &lt;b&gt;&#123;label&#125;&lt;/b&gt; | عم تشوف سنة سابقة · &lt;b&gt;&#123;label&#125;&lt;/b&gt; |
+| `fiscalYearBadge.ariaLabel` | Viewing past year &#123;label&#125;. Tap to return to current year. | عم تشوف سنة سابقة &#123;label&#125;. اضغط للرجوع للسنة الحالية. |
+| `budgetCategoriesList.totalAnnualBudget` | Total annual budget | إجمالي الموازنة السنوية |
+| `budgetCategoriesList.rateByQty` | &#123;rate&#125; × &#123;qty&#125; | &#123;rate&#125; × &#123;qty&#125; |
+| `categoryTotals.totalAnnualBudget` | Total annual budget | إجمالي الموازنة السنوية |
+| `categoryTotals.totalExpensesToDate` | Total expenses to date | إجمالي المصاريف لتاريخه |
+| `apartmentsTable.summaryLine` | &#123;buildings, plural, one &#123;# building&#125; other &#123;# buildings&#125;&#125;, &#123;apartments, plural, one &#123;# apartment&#125; other &#123;# apartments&#125;&#125;, total share &#123;totalShare&#125; | &#123;buildings, plural, one &#123;مبنى واحد&#125; other &#123;# مبانٍ&#125;&#125;، &#123;apartments, plural, one &#123;شقة واحدة&#125; other &#123;# شقق&#125;&#125;، إجمالي الحصص &#123;totalShare&#125; |
+| `apartmentsTable.headerApt` | Apt | الشقة |
+| `apartmentsTable.headerDue` | Due | المستحق |
+| `apartmentsTable.headerCarry` | Carry | المرحّل |
+| `apartmentsTable.headerPaid` | Paid | المدفوع |
+| `apartmentsTable.headerRemaining` | Remaining | المتبقّي |
+| `apartmentsTable.rowLabelWithName` | &#123;lastName&#125; · &#123;label&#125; | &#123;lastName&#125; · &#123;label&#125; |
+| `apartmentsTable.unknownBuilding` | (unknown) | (غير معروف) |
+| `expensesByLine.zero` | $0 | $0 |
+| `expensesByLine.spentNoBudget` | &#123;amount&#125; spent (no budget set) | صُرف &#123;amount&#125; (ما في موازنة محدّدة) |
+| `expensesByLine.ofBudget` | &#123;actual&#125; of &#123;budget&#125; | &#123;actual&#125; من &#123;budget&#125; |
+| `expensesByLine.percent` | (&#123;pct&#125;) | (&#123;pct&#125;) |
+| `expensesByLine.rateByQty` | &#123;rate&#125; × &#123;qty&#125; | &#123;rate&#125; × &#123;qty&#125; |
+| `expensesByLine.totalExpensesToDate` | Total expenses to date | إجمالي المصاريف لتاريخه |
+| `specialProjects.closeProject` | Close project | إغلاق المشروع |
+| `specialProjects.closeProjectTitle` | Close project? | إغلاق المشروع؟ |
+| `specialProjects.closeProjectBodyPrefix` | will move to history. This cannot be undone — no further edits or contributions can be recorded. | رح ينتقل للأرشيف. ما فيك ترجع عنه — ما رح تقدر تعدّل أو تسجّل مساهمات بعد. |
+| `specialProjects.cancel` | Cancel | إلغاء |
+| `specialProjects.closing` | Closing… | عم يُغلق… |
+| `specialProjects.activeProjectsCount` | &#123;count, plural, one &#123;# active project&#125; other &#123;# active projects&#125;&#125; | &#123;count, plural, zero &#123;# مشروع فعّال&#125; one &#123;مشروع فعّال واحد&#125; two &#123;مشروعان فعّالان&#125; few &#123;# مشاريع فعّالة&#125; many &#123;# مشروعًا فعّالًا&#125; other &#123;# مشروع فعّال&#125;&#125; |
+| `specialProjects.amountOfTotal` | &#123;collected&#125; / &#123;total&#125; | &#123;collected&#125; / &#123;total&#125; |
+| `specialProjects.newProject` | New special project | مشروع خاص جديد |
+| `specialProjects.editProject` | Edit project | تعديل المشروع |
+| `specialProjects.projectName` | Project name | اسم المشروع |
+| `specialProjects.descriptionOptional` | Description (optional) | الوصف (اختياري) |
+| `specialProjects.totalTarget` | Total target | الهدف الإجمالي |
+| `specialProjects.required` | Required | مطلوب |
+| `specialProjects.enterPositiveAmount` | Enter a positive amount | أدخل مبلغ موجب |
+| `specialProjects.apartmentDues` | Apartment dues | مستحقات الشقق |
+| `specialProjects.headerApt` | Apt | الشقة |
+| `specialProjects.headerShare` | Share | الحصّة |
+| `specialProjects.totalDues` | Total dues | إجمالي المستحقات |
+| `specialProjects.ofTarget` | of &#123;amount&#125; target | من هدف &#123;amount&#125; |
+| `specialProjects.gap` | (&#123;amount&#125; gap) | (فرق &#123;amount&#125;) |
+| `specialProjects.over` | (&#123;amount&#125; over) | (زيادة &#123;amount&#125;) |
+| `specialProjects.duesInvalid` | One or more apartment dues are invalid. | في مستحقات شقق غير صحيحة. |
+| `specialProjects.missingProjectId` | Missing project id (internal). | رقم المشروع ناقص (داخلي). |
+| `specialProjects.couldNotSave` | Could not save. Please try again. | ما قدرنا نحفظ. جرّب مرة تانية. |
+| `specialProjects.saving` | Saving… | عم يُحفظ… |
+| `specialProjects.createProject` | Create project | إنشاء المشروع |
+| `specialProjects.saveAndReturn` | Save and return | احفظ وارجع |
+| `specialProjects.aptRowLabel` | &#123;building&#125; · &#123;label&#125; | &#123;building&#125; · &#123;label&#125; |
+| `residents.rowTitleWithBuilding` | &#123;building&#125; · &#123;label&#125; | &#123;building&#125; · &#123;label&#125; |
+| `residents.noName` | (no name) | (بدون اسم) |
+| `residents.inviteResident` | Invite resident | دعوة ساكن |
+| `residents.inviteNamed` | Invite &#123;name&#125; | دعوة &#123;name&#125; |
+| `residents.inviteSomeoneElse` | Invite someone else | دعوة شخص آخر |
+| `residents.copied` | Copied! | اننسخ! |
+| `residents.copyLink` | Copy link | نسخ الرابط |
+| `residents.revoking` | Revoking… | عم يُلغى… |
+| `residents.revokeInvite` | Revoke invite | إلغاء الدعوة |
+| `residents.inviteAgain` | Invite again | إعادة الدعوة |
+| `residents.couldNotCopy` | Could not copy the link. Copy it manually from the invite page. | ما قدرنا ننسخ الرابط. انسخه يدويًا من صفحة الدعوة. |
+| `residents.couldNotRevoke` | Could not revoke the invitation. Please try again. | ما قدرنا نلغي الدعوة. جرّب مرة تانية. |
+| `residents.statusNoResident` | No resident | ما في ساكن |
+| `residents.statusNotInvited` | Not yet invited | لسا ما اندعى |
+| `residents.statusInvited` | Invited | مدعوّ |
+| `residents.statusExpired` | Invited · expired | مدعوّ · منتهية |
+| `residents.statusJoined` | Joined | انضمّ |
+| `inviteForm.invitationCreated` | Invitation created. | تمّ إنشاء الدعوة. |
+| `inviteForm.shareWithResident` | Email delivery is being set up — for now, copy this link and share it with the resident yourself. | تسليم البريد الإلكتروني قيد الإعداد — لهلق، انسخ هالرابط وشاركه مع الساكن بنفسك. |
+| `inviteForm.shareWithConcierge` | Email delivery is being set up — for now, copy this link and share it with the concierge yourself. | تسليم البريد الإلكتروني قيد الإعداد — لهلق، انسخ هالرابط وشاركه مع الناطور بنفسك. |
+| `inviteForm.shareWithTreasurer` | Email delivery is being set up — for now, copy this link and share it with the treasurer yourself. | تسليم البريد الإلكتروني قيد الإعداد — لهلق، انسخ هالرابط وشاركه مع أمين الصندوق بنفسك. |
+| `inviteForm.copied` | Copied! | اننسخ! |
+| `inviteForm.copyLink` | Copy link | نسخ الرابط |
+| `inviteForm.backToResidents` | Back to residents | رجوع للسكّان |
+| `inviteForm.backToConcierges` | Back to concierges | رجوع للنواطير |
+| `inviteForm.backToTreasurers` | Back to treasurers | رجوع لأمناء الصندوق |
+| `inviteForm.residentName` | Resident name | اسم الساكن |
+| `inviteForm.conciergeName` | Concierge name | اسم الناطور |
+| `inviteForm.treasurerName` | Treasurer name | اسم أمين الصندوق |
+| `inviteForm.email` | Email | البريد الإلكتروني |
+| `inviteForm.phone` | Phone | الهاتف |
+| `inviteForm.optional` | (optional) | (اختياري) |
+| `inviteForm.language` | Language | اللغة |
+| `inviteForm.english` | English | إنكليزي |
+| `inviteForm.arabic` | Arabic | عربي |
+| `inviteForm.provideContact` | Provide at least an email or a phone number. | أدخل على الأقل بريد إلكتروني أو رقم هاتف. |
+| `inviteForm.somethingWentWrong` | Something went wrong. Please try again. | صار في خطأ. جرّب مرة تانية. |
+| `inviteForm.creating` | Creating… | عم يُنشأ… |
+| `inviteForm.createInvitation` | Create invitation | إنشاء الدعوة |
+| `concierges.noName` | (no name) | (بدون اسم) |
+| `concierges.copied` | Copied! | اننسخ! |
+| `concierges.copyLink` | Copy link | نسخ الرابط |
+| `concierges.revoking` | Revoking… | عم يُلغى… |
+| `concierges.revokeInvite` | Revoke invite | إلغاء الدعوة |
+| `concierges.inviteAgain` | Invite again | إعادة الدعوة |
+| `concierges.couldNotCopy` | Could not copy the link. Copy it manually from the invite page. | ما قدرنا ننسخ الرابط. انسخه يدويًا من صفحة الدعوة. |
+| `concierges.couldNotRevoke` | Could not revoke the invitation. Please try again. | ما قدرنا نلغي الدعوة. جرّب مرة تانية. |
+| `concierges.statusInvited` | Invited | مدعوّ |
+| `concierges.statusExpired` | Invited · expired | مدعوّ · منتهية |
+| `concierges.statusJoined` | Joined | انضمّ |
+| `concierges.statusRemoved` | Removed | مُزال |
+| `treasurers.noName` | (no name) | (بدون اسم) |
+| `treasurers.copied` | Copied! | اننسخ! |
+| `treasurers.copyLink` | Copy link | نسخ الرابط |
+| `treasurers.revoking` | Revoking… | عم يُلغى… |
+| `treasurers.revokeInvite` | Revoke invite | إلغاء الدعوة |
+| `treasurers.inviteAgain` | Invite again | إعادة الدعوة |
+| `treasurers.couldNotCopy` | Could not copy the link. Copy it manually from the invite page. | ما قدرنا ننسخ الرابط. انسخه يدويًا من صفحة الدعوة. |
+| `treasurers.couldNotRevoke` | Could not revoke the invitation. Please try again. | ما قدرنا نلغي الدعوة. جرّب مرة تانية. |
+| `treasurers.statusInvited` | Invited | مدعوّ |
+| `treasurers.statusExpired` | Invited · expired | مدعوّ · منتهية |
+| `treasurers.statusJoined` | Joined | انضمّ |
+| `treasurers.statusRemoved` | Removed | مُزال |
+| `review.submittedBy` | Submitted by | أرسلها |
+| `review.conciergeClaimed` | Concierge claimed | مطالبة الناطور |
+| `review.claimedValue` | &#123;amount&#125; · &#123;category&#125; | &#123;amount&#125; · &#123;category&#125; |
+| `review.conciergeNote` | Concierge note | ملاحظة الناطور |
+| `review.category` | Category | الفئة |
+| `review.pickCategory` | Pick a category… | اختر فئة… |
+| `review.line` | Line | البند |
+| `review.syntheticOtherLine` | Other | أخرى |
+| `review.noDescription` | (no description) | (بدون وصف) |
+| `review.vendor` | Vendor | المورّد |
+| `review.optional` | (optional) | (اختياري) |
+| `review.amount` | Amount | المبلغ |
+| `review.spentOn` | Spent on | تاريخ الصرف |
+| `review.invoicePeriod` | Invoice period | فترة الفاتورة |
+| `review.month` | Month | الشهر |
+| `review.year` | Year | السنة |
+| `review.photo` | Photo | الصورة |
+| `review.receiptAlt` | Receipt | إيصال |
+| `review.addReason` | Add a reason so the concierge knows what to fix. | أضف سبب حتى يعرف الناطور شو لازم يصلّح. |
+| `review.readOnly` | Read-only — this view is from a past fiscal year. Approval and rejection are available only on the current year. | للقراءة فقط — هالعرض من سنة مالية سابقة. الموافقة والرفض متوفّرين بس على السنة الحالية. |
+| `review.uploadingPhoto` | Uploading photo… | عم تُرفع الصورة… |
+| `review.approving` | Approving… | عم تتم الموافقة… |
+| `review.saved` | Saved | انحفظ |
+| `review.approveAndPost` | Approve & post | وافق وانشر |
+| `review.reject` | Reject… | رفض… |
+| `review.reasonForRejecting` | Reason for rejecting | سبب الرفض |
+| `review.rejectPlaceholder` | e.g. Wrong category — this is utilities, not maintenance. | مثلاً: فئة غلط — هيدا كهرباء وماء، مش صيانة. |
+| `review.cancel` | Cancel | إلغاء |
+| `review.rejecting` | Rejecting… | عم يُرفض… |
+| `review.confirmReject` | Confirm reject | تأكيد الرفض |
+
+## `concierge` — 45 strings
+
+Concierge surface (submission list, form, status banners).
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `addNewExpense` | + Add new expense | + إضافة مصروف جديد |
+| `mySubmissions` | My submissions | مصاريفي |
+| `emptyStateHint` | No submissions yet. Tap + Add new expense to send one to your admin for review. | لا توجد مصاريف بعد. اضغط + إضافة مصروف جديد لإرسال واحد إلى الإدارة للمراجعة. |
+| `newExpenseTitle` | New expense | مصروف جديد |
+| `newExpenseHint` | Your admin reviews and approves before it posts. | تتم مراجعة المصروف من قبل الإدارة قبل تسجيله. |
+| `statusBannerPendingHeadline` | Pending admin review | قيد المراجعة |
+| `statusBannerPendingHint` | You can edit until your admin reviews this. | يمكنك التعديل إلى أن تراجع الإدارة الطلب. |
+| `statusBannerApprovedHeadline` | Approved by admin | تم القبول من الإدارة |
+| `statusBannerRejectedHeadline` | Returned by admin | تم إرجاعه من الإدارة |
+| `fieldCategory` | Category | الفئة |
+| `fieldVendor` | Vendor | المورّد |
+| `fieldAmount` | Amount | المبلغ |
+| `fieldInvoicePeriod` | Invoice period | فترة الفاتورة |
+| `fieldNote` | Note | ملاحظة |
+| `fieldPhoto` | Photo | صورة |
+| `formInvoicePeriodLabel` | Invoice period | فترة الفاتورة |
+| `formMonthAriaLabel` | Month | الشهر |
+| `formYearAriaLabel` | Year | السنة |
+| `buttonSubmitForReview` | Submit for review | إرسال للمراجعة |
+| `buttonSaveChanges` | Save changes | حفظ التعديلات |
+| `buttonUploadingPhoto` | Uploading photo… | جاري رفع الصورة… |
+| `buttonSaving` | Saving… | جاري الحفظ… |
+| `buttonSaved` | Saved | تم الحفظ |
+| `statusPending` | Pending | قيد المراجعة |
+| `statusApproved` | Approved | مقبول |
+| `statusRejected` | Rejected | مرفوض |
+| `receiptPhotoAlt` | Receipt | إيصال |
+| `receiptPreviewAlt` | Receipt preview | معاينة الإيصال |
+| `exitCommunity` | Exit community | الخروج من المبنى |
+| `exitConfirmTemplate` | Leave &#123;name&#125;? You'll lose access unless you're re-invited. | هل تريد الخروج من &#123;name&#125;؟ ستفقد الوصول ما لم تتم دعوتك مجدداً. |
+| `exitConfirm` | Leave | خروج |
+| `exitCancel` | Cancel | إلغاء |
+| `errorSubmissionIdMissing` | Submission id missing. Refresh and try again. | معرّف الإرسال مفقود. أعد تحميل الصفحة وحاول مجدداً. |
+| `errorPickCategory` | Pick a category. | اختر فئة. |
+| `errorInvalidAmount` | Enter a valid amount. | أدخل مبلغاً صحيحاً. |
+| `errorAmountTooLarge` | Amount is too large. | المبلغ كبير جداً. |
+| `errorPickMonth` | Pick an invoice month. | اختر شهر الفاتورة. |
+| `errorPickYear` | Pick a valid year. | اختر سنة صحيحة. |
+| `errorVendorTooLong` | Vendor must be 100 characters or fewer. | يجب أن يكون اسم المورّد ١٠٠ حرف أو أقل. |
+| `errorNoteTooLong` | Note must be 200 characters or fewer. | يجب أن تكون الملاحظة ٢٠٠ حرف أو أقل. |
+| `errorPhotoNotInCommunity` | Photo not in your community. | الصورة ليست ضمن مبناك. |
+| `errorNoFiscalYear` | No fiscal year configured for your community. | لا توجد سنة مالية محددة لمبناك. |
+| `errorSaveFailed` | Could not save submission. Please try again. | تعذّر حفظ الإرسال. حاول مجدداً. |
+| `errorSaveChangesFailed` | Could not save changes. Please try again. | تعذّر حفظ التعديلات. حاول مجدداً. |
+| `errorNotEditable` | This submission is no longer editable. | لم يعد بالإمكان تعديل هذا الإرسال. |
+
+## `dashboard` — 65 strings
+
+Admin dashboard + all detail pages (cash, budget, collections, expenses, apartments, residents, concierges, treasurers, concierge-submissions).
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `home.title` | Dashboard | لوحة التحكم |
+| `home.fyPrefix` | FY  | السنة المالية  |
+| `home.submissionsPendingOne` | 1 concierge submission pending | طلب ناطور واحد بانتظار المراجعة |
+| `home.submissionsPendingOther` | &#123;count&#125; concierge submissions pending | &#123;count&#125; طلبات ناطور بانتظار المراجعة |
+| `home.submissionsNonePending` | No concierge submissions pending | ما في طلبات ناطور بانتظار المراجعة |
+| `home.cardCash` | CASH ON HAND | النقد المتوفّر |
+| `home.cardBudget` | ANNUAL BUDGET | الموازنة السنوية |
+| `home.cardCollections` | COLLECTIONS | التحصيلات |
+| `home.cardExpenses` | EXPENSES | المصاريف |
+| `home.collectionsPctOfAnnual` | &#123;pct&#125;% of annual | &#123;pct&#125;٪ من السنوي |
+| `home.expensesPctOfBudget` | &#123;pct&#125;% of budget | &#123;pct&#125;٪ من الموازنة |
+| `home.specialProjectsHeading` | Special projects | مشاريع خاصة |
+| `home.specialProjectsActiveOne` | 1 active special project | مشروع خاص واحد فعّال |
+| `home.specialProjectsActiveOther` | &#123;count&#125; active special projects | &#123;count&#125; مشاريع خاصة فعّالة |
+| `home.past` | Past → | السابقة → |
+| `home.newShort` | + New | + جديد |
+| `home.noActiveProjectsPast` | No active special projects at this time. | ما في مشاريع خاصة فعّالة حالياً. |
+| `home.startProjectPrompt` | + Start a one-off project (lobby paint, roof repair, …) | + ابدأ مشروع لمرة واحدة (دهان المدخل، تصليح السطح، …) |
+| `home.apartmentContributions` | Apartment contributions | مساهمات الشقق |
+| `home.moreApartmentsOne` | + &#123;count&#125; more apartment | + &#123;count&#125; شقة إضافية |
+| `home.moreApartmentsOther` | + &#123;count&#125; more apartments | + &#123;count&#125; شقق إضافية |
+| `cash.title` | Cash on hand | النقد المتوفّر |
+| `cash.edit` | Edit | تعديل |
+| `cash.openingCash` | Opening cash | النقد الافتتاحي |
+| `cash.asOf` | as of &#123;date&#125; | بتاريخ &#123;date&#125; |
+| `cash.collectionsSinceOpening` | + Collections since opening | + التحصيلات منذ الافتتاح |
+| `cash.expensesSinceOpening` | − Expenses since opening | − المصاريف منذ الافتتاح |
+| `cash.closingCash` | = Closing cash | = النقد الختامي |
+| `cash.currentCashOnHand` | = Current cash on hand | = النقد المتوفّر حالياً |
+| `budget.title` | Annual budget | الموازنة السنوية |
+| `budget.edit` | Edit | تعديل |
+| `budget.viewHistory` | View history | عرض السجل |
+| `budgetHistory.title` | Budget history | سجل الموازنة |
+| `budgetHistory.empty` | No history yet — versions are recorded when you save changes to the budget. | ما في سجل بعد — بتنسجّل النسخ لما تحفظ تعديلات عالموازنة. |
+| `collections.title` | Collections | التحصيلات |
+| `collections.addNew` | Add new | إضافة جديد |
+| `collections.setUpPreSaken` | Set up pre-Saken | إعداد ما قبل ساكن |
+| `collections.viewAll` | View all | عرض الكل |
+| `expenses.title` | Expenses | المصاريف |
+| `expenses.addNew` | Add new | إضافة جديد |
+| `expenses.setUpPreSaken` | Set up pre-Saken | إعداد ما قبل ساكن |
+| `expenses.viewAll` | View all | عرض الكل |
+| `expenses.byCategory` | Expenses by category | المصاريف حسب الفئة |
+| `apartment.titleTemplate` | &#123;building&#125; · Apt &#123;label&#125; | &#123;building&#125; · شقة &#123;label&#125; |
+| `residents.title` | Residents | السكّان |
+| `residents.intro` | Invite residents to your community and manage their access. | ادعُ السكّان لمجتمعك وتحكّم بوصولهم. |
+| `residents.noApartments` | No apartments yet. Add apartments in Edit apartments first. | ما في شقق بعد. ضيف شقق من تعديل الشقق أولاً. |
+| `residents.inviteTitle` | Invite resident | دعوة ساكن |
+| `concierges.title` | Concierges | النواطير |
+| `concierges.intro` | Manage concierge access to your community. | تحكّم بوصول الناطور لمجتمعك. |
+| `concierges.addConcierge` | Add concierge | إضافة ناطور |
+| `concierges.empty` | No concierges yet. Tap Add concierge to invite one. | ما في نواطير بعد. اضغط إضافة ناطور لتدعو واحد. |
+| `concierges.inviteTitle` | Invite concierge | دعوة ناطور |
+| `treasurers.title` | Treasurers | أمناء الصندوق |
+| `treasurers.intro` | A treasurer can record expenses and collections and approve concierge submissions. Community settings stay with the admin. | أمين الصندوق فيه يسجّل المصاريف والتحصيلات ويوافق على طلبات الناطور. إعدادات المجتمع بتبقى مع المسؤول. |
+| `treasurers.addTreasurer` | Add treasurer | إضافة أمين صندوق |
+| `treasurers.empty` | No treasurers yet. Tap Add treasurer to invite one. | ما في أمناء صندوق بعد. اضغط إضافة أمين صندوق لتدعو واحد. |
+| `treasurers.inviteTitle` | Invite treasurer | دعوة أمين صندوق |
+| `conciergeSubmissions.title` | Concierge submissions | طلبات الناطور |
+| `conciergeSubmissions.noneIntro` | No pending submissions. New ones from your concierge appear here for review. | ما في طلبات بانتظار المراجعة. الطلبات الجديدة من ناطورك بتظهر هون للمراجعة. |
+| `conciergeSubmissions.pendingIntroOne` | 1 submission pending your review. | طلب واحد بانتظار مراجعتك. |
+| `conciergeSubmissions.pendingIntroOther` | &#123;count&#125; submissions pending your review. | &#123;count&#125; طلبات بانتظار مراجعتك. |
+| `conciergeSubmissions.submittedBy` | Submitted by &#123;name&#125; | مقدّم من &#123;name&#125; |
+| `conciergeSubmissions.footer` | Saken — saken.com | ساكن — saken.com |
+| `conciergeSubmissions.reviewTitle` | Review submission | مراجعة الطلب |
+
+## `expenseForm` — 30 strings
+
+The shared expense form (admin + concierge).
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `categoryLabel` | Category | الفئة |
+| `categoryPlaceholder` | Select category… | اختر فئة… |
+| `lineLabel` | Line | البند |
+| `linePickCategoryFirst` | Pick a category first… | اختر فئة أولاً… |
+| `linePlaceholder` | Select line… | اختر البند… |
+| `lineSyntheticOther` | Other | أخرى |
+| `lineNoDescription` | (no description) | (بدون وصف) |
+| `vendorLabel` | Vendor | المورّد |
+| `amountLabel` | Amount | المبلغ |
+| `amountPlaceholder` | 0.00 | ٠٫٠٠ |
+| `dateLabel` | Date | التاريخ |
+| `noteLabel` | Note | ملاحظة |
+| `photoLabel` | Receipt photo | صورة الإيصال |
+| `photoAddButton` | Add photo | إضافة صورة |
+| `photoReplaceButton` | Replace | استبدال |
+| `photoRemoveButton` | Remove | إزالة |
+| `photoUploadingText` | Uploading… | جاري الرفع… |
+| `photoPreviewAlt` | Receipt preview | معاينة الإيصال |
+| `errorRequired` | Required | مطلوب |
+| `errorAmountMustBePositive` | Must be positive | يجب أن يكون موجباً |
+| `errorAmountMustBeNumeric` | Enter a number | أدخل رقماً |
+| `errorDateInFuture` | Date cannot be in the future | لا يمكن أن يكون التاريخ في المستقبل |
+| `saveButtonNew` | Save expense | حفظ المصروف |
+| `saveButtonEdit` | Save changes | حفظ التعديلات |
+| `saveButtonSaving` | Saving… | جاري الحفظ… |
+| `deleteButton` | Delete expense | حذف المصروف |
+| `deleteConfirmPrompt` | Delete this expense? This cannot be undone. | حذف هذا المصروف؟ لا يمكن التراجع عن ذلك. |
+| `deleteConfirmCancel` | Cancel | إلغاء |
+| `deleteConfirmYes` | Delete | حذف |
+| `deletingText` | Deleting… | جاري الحذف… |
+
+## `expenses` — 36 strings
+
+Admin expenses pages (list, receipt, new, edit, pre-Saken).
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `list.title` | All expenses | كل المصاريف |
+| `list.addExpense` | + Add expense | + إضافة مصروف |
+| `list.empty` | No expenses recorded yet. | ما في مصاريف مسجّلة لهلق. |
+| `receipt.title` | Expense | مصروف |
+| `receipt.rowAmount` | Amount | المبلغ |
+| `receipt.rowVendor` | Vendor | المورّد |
+| `receipt.rowCategory` | Category | الفئة |
+| `receipt.rowLine` | Line | البند |
+| `receipt.rowDate` | Date | التاريخ |
+| `receipt.rowNote` | Note | ملاحظة |
+| `receipt.rowRecordedBy` | Recorded by | سجّلها |
+| `receipt.rowRecordedOn` | Recorded on | تاريخ التسجيل |
+| `receipt.rowLastUpdated` | Last updated | آخر تعديل |
+| `receipt.lineMissing` | — | — |
+| `receipt.lineNoDescription` | (no description) | (بدون وصف) |
+| `receipt.emptyValue` | — | — |
+| `receipt.preSakenOpening` | Pre-Saken opening | رصيد ما قبل ساكن |
+| `receipt.photoAltVendor` | Receipt from &#123;vendor&#125; | إيصال من &#123;vendor&#125; |
+| `receipt.photoAltGeneric` | Receipt photo | صورة الإيصال |
+| `receipt.editExpense` | Edit expense | تعديل المصروف |
+| `edit.title` | Edit expense | تعديل المصروف |
+| `new.title` | Record expense | تسجيل مصروف |
+| `preSaken.title` | Set up pre-Saken expenses | إعداد مصاريف ما قبل ساكن |
+| `preSaken.introBeforeOpening` | These expenses cover the period before your opening cash balance | هالمصاريف بتغطّي الفترة يلي قبل رصيدك النقدي الافتتاحي |
+| `preSaken.introSetOn` |  (set on &#123;date&#125;) |  (المحدّد بتاريخ &#123;date&#125;) |
+| `preSaken.introAfter` | . They appear in your reports but do not affect your current cash on hand — that amount is already accounted for in the opening balance. | . بتظهر بتقاريرك بس ما بتأثّر على النقد المتوفّر عندك حالياً — هالمبلغ أصلاً محسوب ضمن الرصيد الافتتاحي. |
+| `preSaken.tipOther` | Tip: use “Other” when an expense doesn’t fit an existing line. | نصيحة: استعمل «أخرى» لما المصروف ما ينطبق على بند موجود. |
+| `preSaken.otherRowLabel` | Other | أخرى |
+| `preSaken.noDescription` | (no description) | (بدون وصف) |
+| `preSaken.lineCount` | &#123;count, plural, one &#123;# line&#125; other &#123;# lines&#125;&#125; | &#123;count, plural, zero &#123;# بند&#125; one &#123;بند واحد&#125; two &#123;بندين&#125; few &#123;# بنود&#125; many &#123;# بند&#125; other &#123;# بند&#125;&#125; |
+| `preSaken.colLine` | Line | البند |
+| `preSaken.colAmount` | Amount | المبلغ |
+| `preSaken.colNote` | Note | ملاحظة |
+| `preSaken.saveAndReturn` | Save and return to dashboard | احفظ وارجع للوحة |
+| `preSaken.saving` | Saving… | عم يحفظ… |
+| `preSaken.errorGeneric` | Could not save. Please try again. | ما قدرنا نحفظ. جرّب مرة تانية. |
+
+## `fiscalYear` — 48 strings
+
+Fiscal-year page + rollover confirmation.
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `title` | Fiscal year | السنة المالية |
+| `currentYear` | Current year | السنة الحالية |
+| `active` | Active | فعّالة |
+| `started` | Started &#123;date&#125; | بلّشت &#123;date&#125; |
+| `openingCashSuffix` |  · Opening cash &#123;amount&#125; |  · النقد الافتتاحي &#123;amount&#125; |
+| `noActiveYear` | No active fiscal year configured. | ما في سنة مالية فعّالة. |
+| `pastYears` | Past years | السنوات السابقة |
+| `closedOn` | Closed &#123;date&#125; | أُقفلت &#123;date&#125; |
+| `closedUnknown` | Closed — | أُقفلت — |
+| `startNewYear` | Start new fiscal year → | ابدأ سنة مالية جديدة → |
+| `startNewYearHint` | Closing the current year archives its books and opens a fresh year with the same budget. You'll be able to view the archived year here at any time. | إقفال السنة الحالية بيأرشف دفاترها وبيفتح سنة جديدة بنفس الموازنة. فيك تشوف السنة المؤرشفة هون بأي وقت. |
+| `pendingBlockOne` | 1 concierge submission is pending. | في طلب ناطور واحد بانتظار المراجعة. |
+| `pendingBlockOther` | &#123;count&#125; concierge submissions are pending. | في &#123;count&#125; طلبات ناطور بانتظار المراجعة. |
+| `pendingBlockHint` | Approve or reject every pending submission before closing the year — their amounts need to be recorded in the current ledger. | وافق أو ارفض كل طلب معلّق قبل ما تقفل السنة — مبالغها لازم تنسجّل بدفتر السنة الحالية. |
+| `goToPending` | Go to pending submissions → | روح عالطلبات المعلّقة → |
+| `rollover.title` | Close fiscal year | إقفال السنة المالية |
+| `rollover.permanentHeadline` | This action is permanent. | هالخطوة نهائية. |
+| `rollover.permanentBody` | Closing the fiscal year archives its books and opens a new year. The archived year cannot be reopened; its figures are frozen for historical viewing only. | إقفال السنة المالية بيأرشف دفاترها وبيفتح سنة جديدة. السنة المؤرشفة ما فيها تنفتح من جديد؛ أرقامها بتنجمّد للعرض التاريخي بس. |
+| `rollover.newYearHeading` | New fiscal year | السنة المالية الجديدة |
+| `rollover.archivedNote` | The closing year &#123;period&#125; will be closed today (&#123;closingDate&#125;). Its original dates (&#123;originalStart&#125; → &#123;originalEnd&#125;) are preserved on the archived record. | السنة المقفلة &#123;period&#125; رح تنقفل اليوم (&#123;closingDate&#125;). تواريخها الأصلية (&#123;originalStart&#125; → &#123;originalEnd&#125;) محفوظة بالسجل المؤرشف. |
+| `rollover.closingCashHeading` | Closing cash | النقد الختامي |
+| `rollover.openingCash` | Opening cash | النقد الافتتاحي |
+| `rollover.collectionsThisYear` | + Collections this year | + التحصيلات هالسنة |
+| `rollover.expensesThisYear` | − Expenses this year | − المصاريف هالسنة |
+| `rollover.frozenClosingCash` | = Frozen closing cash | = النقد الختامي المجمّد |
+| `rollover.closingCashHint` | The closing balance becomes the new year's opening cash. | الرصيد الختامي بيصير النقد الافتتاحي للسنة الجديدة. |
+| `rollover.budgetHeading` | Budget | الموازنة |
+| `rollover.budgetSummary` | &#123;categories&#125; · &#123;lines&#125; · &#123;amount&#125; annual | &#123;categories&#125; · &#123;lines&#125; · &#123;amount&#125; سنوياً |
+| `rollover.categoryOne` | &#123;count&#125; category | فئة واحدة |
+| `rollover.categoryOther` | &#123;count&#125; categories | &#123;count&#125; فئات |
+| `rollover.lineOne` | &#123;count&#125; line | بند واحد |
+| `rollover.lineOther` | &#123;count&#125; lines | &#123;count&#125; بنود |
+| `rollover.budgetHint` | The full budget tree is copied into the new year unchanged. You can edit it from Dashboard › Annual budget after closing. | شجرة الموازنة كاملة بتننسخ عالسنة الجديدة بدون تغيير. فيك تعدّلها من لوحة التحكم ‹ الموازنة السنوية بعد الإقفال. |
+| `rollover.carryHeading` | Apartment carry into new year | رصيد الشقق المرحّل للسنة الجديدة |
+| `rollover.colApt` | Apt | شقة |
+| `rollover.colDue` | Due | المستحق |
+| `rollover.colPaid` | Paid | المدفوع |
+| `rollover.colPrior` | Prior | السابق |
+| `rollover.colNewCarry` | New carry | الرصيد الجديد |
+| `rollover.carryHint` | Each apartment's new carry = due − paid + prior carry. Negative values mean the apartment is ahead going into the new year. | الرصيد الجديد لكل شقة = المستحق − المدفوع + الرصيد السابق. القيم السالبة معناها الشقة متقدّمة بالدفع عالسنة الجديدة. |
+| `rollover.confirmPrompt` | To confirm, type &#123;phrase&#125;: | للتأكيد، اكتب &#123;phrase&#125;: |
+| `rollover.submit` | Close year and open new year | اقفل السنة وافتح سنة جديدة |
+| `rollover.submitting` | Closing year… | عم يقفل السنة… |
+| `rollover.errorPendingOne` | A concierge submission landed while you were on this page. 1 submission is now pending — approve or reject before closing the year. | وصل طلب ناطور وانت عهالصفحة. في طلب واحد هلق معلّق — وافق أو ارفض قبل ما تقفل السنة. |
+| `rollover.errorPendingOther` | A concierge submission landed while you were on this page. &#123;count&#125; submissions are now pending — approve or reject before closing the year. | وصل طلب ناطور وانت عهالصفحة. في &#123;count&#125; طلبات هلق معلّقة — وافق أو ارفض قبل ما تقفل السنة. |
+| `rollover.errorNoActiveFy` | The fiscal year was already closed in another session. Reload to see the current state. | السنة المالية تقفلت من جلسة تانية. عيّد التحميل لتشوف الوضع الحالي. |
+| `rollover.errorNotAuthenticated` | Your session expired. Reload and sign in again. | جلستك انتهت. عيّد التحميل وسجّل دخول من جديد. |
+| `rollover.errorNotAuthorized` | You do not have permission to close the year. | ما عندك صلاحية تقفل السنة. |
+
+## `invitations` — 14 strings
+
+Invite landing + accept flow.
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `landing.heading` | You're invited to &#123;community&#125; | إنت مدعو لـ &#123;community&#125; |
+| `landing.roleResident` | resident | ساكن |
+| `landing.roleConcierge` | concierge | ناطور |
+| `landing.bodyWithName` | &#123;name&#125;, you've been invited to join &lt;c&gt;&#123;community&#125;&lt;/c&gt; as a &#123;role&#125;&#123;apartment&#125;. | &#123;name&#125;، إنت مدعو لتنضمّ لـ &lt;c&gt;&#123;community&#125;&lt;/c&gt; كـ&#123;role&#125;&#123;apartment&#125;. |
+| `landing.bodyNoName` | You've been invited to join &lt;c&gt;&#123;community&#125;&lt;/c&gt; as a &#123;role&#125;&#123;apartment&#125;. | إنت مدعو لتنضمّ لـ &lt;c&gt;&#123;community&#125;&lt;/c&gt; كـ&#123;role&#125;&#123;apartment&#125;. |
+| `landing.apartmentSuffix` |  for apartment &#123;label&#125; |  للشقة &#123;label&#125; |
+| `landing.signedInAs` | Signed in as &lt;ident&gt;&#123;identity&#125;&lt;/ident&gt;. | مسجّل دخول كـ &lt;ident&gt;&#123;identity&#125;&lt;/ident&gt;. |
+| `landing.signInToAccept` | Sign in to accept — use whichever you prefer. Your invitation isn't tied to a specific email. | سجّل دخول لتقبل — استخدم اللي بتفضّله. دعوتك مش مربوطة بإيميل معيّن. |
+| `landing.invitedBy` | Invited by your building admin via Saken. | مدعو من إدارة مبناك عبر Saken. |
+| `landing.invalidHeading` | This link isn't valid | هالرابط مش صالح |
+| `landing.invalidBody` | This invitation link is invalid, has expired, or has already been used. Ask your building admin to send a new one. | رابط الدعوة هاد مش صالح، أو خلصت صلاحيته، أو سبق واستُخدم. اطلب من إدارة مبناك تبعتلك واحد جديد. |
+| `accept.accept` | Accept & join &#123;community&#125; | اقبل وانضمّ لـ &#123;community&#125; |
+| `accept.joining` | Joining… | عم تنضمّ… |
+| `accept.genericError` | Could not accept the invitation. Please try again. | ما قدرنا نقبل الدعوة. جرّب مرة تانية. |
+
+## `months` — 12 strings
+
+Month names (Levantine, not MSA/Gulf).
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `full[0]` | January | كانون الثاني |
+| `full[1]` | February | شباط |
+| `full[2]` | March | آذار |
+| `full[3]` | April | نيسان |
+| `full[4]` | May | أيار |
+| `full[5]` | June | حزيران |
+| `full[6]` | July | تموز |
+| `full[7]` | August | آب |
+| `full[8]` | September | أيلول |
+| `full[9]` | October | تشرين الأول |
+| `full[10]` | November | تشرين الثاني |
+| `full[11]` | December | كانون الأول |
+
+## `paymentForm` — 23 strings
+
+The shared collection/payment form.
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `apartmentLabel` | Apartment | الشقة |
+| `apartmentPlaceholder` | Select apartment… | اختر الشقة… |
+| `amountLabel` | Amount | المبلغ |
+| `dateReceivedLabel` | Date received | تاريخ القبض |
+| `paymentMethodLabel` | Payment method | طريقة الدفع |
+| `methodNotSpecified` | Not specified | غير محدد |
+| `methodCash` | Cash | نقداً |
+| `methodBankTransfer` | Bank transfer | تحويل بنكي |
+| `methodCheck` | Check | شيك |
+| `noteLabel` | Note | ملاحظة |
+| `errorRequired` | Required | مطلوب |
+| `errorAmountMustBePositive` | Must be positive | يجب أن يكون موجباً |
+| `errorAmountMustBeNumeric` | Enter a number | أدخل رقماً |
+| `errorDateInFuture` | Date cannot be in the future | لا يمكن أن يكون التاريخ في المستقبل |
+| `saveNew` | Save collection | حفظ الدفعة |
+| `saveEdit` | Save changes | حفظ التعديلات |
+| `saving` | Saving… | جاري الحفظ… |
+| `deleteButton` | Delete collection | حذف الدفعة |
+| `deleteConfirmPrompt` | Delete this collection? This cannot be undone. | حذف هذه الدفعة؟ لا يمكن التراجع عن ذلك. |
+| `deleteCancel` | Cancel | إلغاء |
+| `deleteConfirmYes` | Delete | حذف |
+| `deleting` | Deleting… | جاري الحذف… |
+| `errorGeneric` | Something went wrong. Try again. | حدث خطأ ما. حاول مجدداً. |
+
+## `payments` — 42 strings
+
+Admin collections pages (list, receipt, new, edit, pre-Saken).
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `list.title` | All collections | كل التحصيلات |
+| `list.addCollection` | + Add collection | + إضافة تحصيل |
+| `list.empty` | No collections recorded yet. | ما في تحصيلات مسجّلة لهلق. |
+| `list.receiptNumberPrefix` | # | # |
+| `list.preSakenOpening` | Pre-Saken opening | رصيد ما قبل ساكن |
+| `list.unknownApartment` | (unknown apartment) | (شقة غير معروفة) |
+| `list.unknown` | (unknown) | (غير معروف) |
+| `receipt.title` | Collection receipt | إيصال تحصيل |
+| `receipt.specialTitle` | &#123;project&#125; contribution | مساهمة بمشروع &#123;project&#125; |
+| `receipt.receiptNumber` | Receipt #&#123;number&#125; | إيصال رقم &#123;number&#125; |
+| `receipt.rowAmount` | Amount | المبلغ |
+| `receipt.rowApartment` | Apartment | الشقة |
+| `receipt.rowProject` | Project | المشروع |
+| `receipt.rowDateReceived` | Date received | تاريخ الاستلام |
+| `receipt.rowPaymentMethod` | Payment method | طريقة الدفع |
+| `receipt.rowNote` | Note | ملاحظة |
+| `receipt.rowRecordedBy` | Recorded by | سجّلها |
+| `receipt.rowRecordedOn` | Recorded on | تاريخ التسجيل |
+| `receipt.rowLastUpdated` | Last updated | آخر تعديل |
+| `receipt.methodCash` | Cash | نقداً |
+| `receipt.methodBankTransfer` | Bank transfer | تحويل بنكي |
+| `receipt.methodCheck` | Check | شيك |
+| `receipt.emptyValue` | — | — |
+| `receipt.preSakenOpening` | Pre-Saken opening | رصيد ما قبل ساكن |
+| `receipt.editCollection` | Edit collection | تعديل التحصيل |
+| `edit.title` | Edit collection | تعديل التحصيل |
+| `new.title` | Record a collection | تسجيل تحصيل |
+| `preSaken.title` | Set up pre-Saken collections | إعداد تحصيلات ما قبل ساكن |
+| `preSaken.introBeforeOpening` | These collections cover the period before your opening cash balance | هالتحصيلات بتغطّي الفترة يلي قبل رصيدك النقدي الافتتاحي |
+| `preSaken.introSetOn` |  (set on &#123;date&#125;) |  (المحدّد بتاريخ &#123;date&#125;) |
+| `preSaken.introAfter` | . They appear in your reports but do not affect your current cash on hand — that amount is already included in the opening balance. | . بتظهر بتقاريرك بس ما بتأثّر على النقد المتوفّر عندك حالياً — هالمبلغ أصلاً محسوب ضمن الرصيد الافتتاحي. |
+| `preSaken.tipBulk` | Tip: you can enter a bulk amount per apartment, summing all collections received from that apartment | نصيحة: فيك تدخّل مبلغ إجمالي لكل شقة، يجمع كل التحصيلات يلي استلمتها من هالشقة |
+| `preSaken.tipBulkPeriod` |  in the period before &#123;date&#125; |  بالفترة يلي قبل &#123;date&#125; |
+| `preSaken.tipBulkEnd` | . | . |
+| `preSaken.carryoverExplainer` | Carryover represents the residual balance from the previous fiscal year. A positive value means the apartment still owes the community (uncollected from previous year). A negative value means the community owes the apartment (additional contribution made last year). | الرصيد المُرحَّل بيمثّل الرصيد المتبقّي من السنة المالية السابقة. القيمة الموجبة يعني الشقة لسا عليها مستحقات للمجتمع (ما انجبت من السنة الماضية). القيمة السالبة يعني المجتمع عليه مستحقات للشقة (مساهمة إضافية انعملت السنة الماضية). |
+| `preSaken.colApt` | Apt | الشقة |
+| `preSaken.colCollections` | Collections | التحصيلات |
+| `preSaken.colCarryover` | Carryover | المُرحَّل |
+| `preSaken.colNote` | Note | ملاحظة |
+| `preSaken.saveAndReturn` | Save and return to dashboard | احفظ وارجع للوحة |
+| `preSaken.saving` | Saving… | عم يحفظ… |
+| `preSaken.errorGeneric` | Could not save. Please try again. | ما قدرنا نحفظ. جرّب مرة تانية. |
+
+## `resident` — 106 strings
+
+Resident + magic-link surfaces.
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `common.viewAll` | View all | عرض الكل |
+| `common.viewHistory` | View history | عرض السجل |
+| `common.past` | Past → | السابقة ← |
+| `common.preSakenOpening` | Pre-Saken opening | رصيد ما قبل ساكن |
+| `common.unknown` | (unknown) | (غير معروف) |
+| `common.unknownApartment` | (unknown apartment) | (شقة غير معروفة) |
+| `common.unknownBuilding` | (unknown building) | (مبنى غير معروف) |
+| `common.noDescription` | (no description) | (بدون وصف) |
+| `magicLink.backToDashboard` | ← Dashboard | ← الرئيسية |
+| `magicLink.subtitle` | Read-only community view. | عرض المبنى للقراءة فقط. |
+| `home.title` | Community | المبنى |
+| `home.fyPrefix` |  · FY  |  · السنة المالية  |
+| `home.cards.cashOnHand` | CASH ON HAND | النقد المتوفر |
+| `home.cards.annualBudget` | ANNUAL BUDGET | الميزانية السنوية |
+| `home.cards.collections` | COLLECTIONS | التحصيلات |
+| `home.cards.expenses` | EXPENSES | المصاريف |
+| `home.cards.percentOfAnnual` | &#123;pct&#125;% of annual | &#123;pct&#125;٪ من السنوي |
+| `home.cards.percentOfBudget` | &#123;pct&#125;% of budget | &#123;pct&#125;٪ من الميزانية |
+| `home.treasurerTools.heading` | Treasurer tools | أدوات أمين الصندوق |
+| `home.treasurerTools.addExpense` | + Add expense | + إضافة مصروف |
+| `home.treasurerTools.addCollection` | + Add collection | + إضافة تحصيل |
+| `home.treasurerTools.submissionsPending` | &#123;count, plural, one &#123;# concierge submission pending&#125; other &#123;# concierge submissions pending&#125;&#125; | &#123;count, plural, zero &#123;# طلب ناطور بانتظار المراجعة&#125; one &#123;طلب ناطور واحد بانتظار المراجعة&#125; two &#123;طلبا ناطور بانتظار المراجعة&#125; few &#123;# طلبات ناطور بانتظار المراجعة&#125; many &#123;# طلب ناطور بانتظار المراجعة&#125; other &#123;# طلب ناطور بانتظار المراجعة&#125;&#125; |
+| `home.treasurerTools.noSubmissionsPending` | No concierge submissions pending | لا توجد طلبات ناطور بانتظار المراجعة |
+| `home.specialProjects.headingZero` | Special projects | المشاريع الخاصة |
+| `home.specialProjects.headingCount` | &#123;count, plural, one &#123;# active special project&#125; other &#123;# active special projects&#125;&#125; | &#123;count, plural, zero &#123;# مشروع خاص نشط&#125; one &#123;مشروع خاص نشط واحد&#125; two &#123;مشروعان خاصان نشطان&#125; few &#123;# مشاريع خاصة نشطة&#125; many &#123;# مشروعاً خاصاً نشطاً&#125; other &#123;# مشروع خاص نشط&#125;&#125; |
+| `home.specialProjects.empty` | No active special projects. | لا توجد مشاريع خاصة نشطة. |
+| `home.apartmentContributions.heading` | Apartment contributions | مساهمات الشقق |
+| `home.apartmentContributions.moreApartments` | &#123;count, plural, one &#123;+ # more apartment&#125; other &#123;+ # more apartments&#125;&#125; | &#123;count, plural, zero &#123;+ # شقة أخرى&#125; one &#123;+ شقة واحدة أخرى&#125; two &#123;+ شقتان أخريان&#125; few &#123;+ # شقق أخرى&#125; many &#123;+ # شقة أخرى&#125; other &#123;+ # شقة أخرى&#125;&#125; |
+| `cash.title` | Cash on hand | النقد المتوفر |
+| `cash.openingCash` | Opening cash | النقد الافتتاحي |
+| `cash.asOf` | as of &#123;date&#125; | بتاريخ &#123;date&#125; |
+| `cash.collectionsSinceOpening` | + Collections since opening | + التحصيلات منذ الافتتاح |
+| `cash.expensesSinceOpening` | − Expenses since opening | − المصاريف منذ الافتتاح |
+| `cash.closingCash` | = Closing cash | = النقد الختامي |
+| `cash.currentCashOnHand` | = Current cash on hand | = النقد المتوفر حالياً |
+| `budget.title` | Annual budget | الميزانية السنوية |
+| `budgetHistory.title` | Budget history | سجل الميزانية |
+| `budgetHistory.empty` | No history yet — versions are recorded when the budget is updated. | لا يوجد سجل بعد — تُسجَّل النسخ عند تحديث الميزانية. |
+| `collections.title` | Collections | التحصيلات |
+| `expenses.title` | Expenses | المصاريف |
+| `expenses.byCategory` | Expenses by category | المصاريف حسب الفئة |
+| `expenses.allTitle` | All expenses | كل المصاريف |
+| `expenses.emptyAll` | No expenses recorded yet. | لا توجد مصاريف مسجلة بعد. |
+| `expenseReceipt.title` | Expense | مصروف |
+| `expenseReceipt.recordTitle` | Record expense | تسجيل مصروف |
+| `expenseReceipt.rows.amount` | Amount | المبلغ |
+| `expenseReceipt.rows.vendor` | Vendor | المورّد |
+| `expenseReceipt.rows.category` | Category | الفئة |
+| `expenseReceipt.rows.line` | Line | البند |
+| `expenseReceipt.rows.date` | Date | التاريخ |
+| `expenseReceipt.rows.note` | Note | ملاحظة |
+| `expenseReceipt.rows.recordedBy` | Recorded by | سجّله |
+| `expenseReceipt.rows.recordedOn` | Recorded on | تاريخ التسجيل |
+| `expenseReceipt.rows.lastUpdated` | Last updated | آخر تحديث |
+| `expenseReceipt.categoryWithSpecify` | &#123;label&#125; — &#123;specify&#125; | &#123;label&#125; — &#123;specify&#125; |
+| `expenseReceipt.receiptPhotoAlt` | Receipt photo | صورة الإيصال |
+| `expenseReceipt.receiptPhotoFromVendorAlt` | Receipt from &#123;vendor&#125; | إيصال من &#123;vendor&#125; |
+| `payments.allTitle` | All collections | كل التحصيلات |
+| `payments.emptyAll` | No collections recorded yet. | لا توجد تحصيلات مسجلة بعد. |
+| `payments.recordTitle` | Record a collection | تسجيل تحصيل |
+| `paymentReceipt.collectionTitle` | Collection receipt | إيصال تحصيل |
+| `paymentReceipt.contributionTitle` | &#123;project&#125; contribution | مساهمة &#123;project&#125; |
+| `paymentReceipt.receiptNumber` | Receipt #&#123;number&#125; | إيصال رقم &#123;number&#125; |
+| `paymentReceipt.rows.amount` | Amount | المبلغ |
+| `paymentReceipt.rows.apartment` | Apartment | الشقة |
+| `paymentReceipt.rows.project` | Project | المشروع |
+| `paymentReceipt.rows.dateReceived` | Date received | تاريخ الاستلام |
+| `paymentReceipt.rows.paymentMethod` | Payment method | طريقة الدفع |
+| `paymentReceipt.rows.note` | Note | ملاحظة |
+| `paymentReceipt.rows.recordedBy` | Recorded by | سجّله |
+| `paymentReceipt.rows.recordedOn` | Recorded on | تاريخ التسجيل |
+| `paymentReceipt.rows.lastUpdated` | Last updated | آخر تحديث |
+| `paymentReceipt.method.cash` | Cash | نقداً |
+| `paymentReceipt.method.bank_transfer` | Bank transfer | تحويل بنكي |
+| `paymentReceipt.method.check` | Check | شيك |
+| `apartment.title` | &#123;building&#125; · Apt &#123;label&#125; | &#123;building&#125; · شقة &#123;label&#125; |
+| `fiscalYear.title` | Fiscal year | السنة المالية |
+| `fiscalYear.currentYear` | Current year | السنة الحالية |
+| `fiscalYear.active` | Active | نشطة |
+| `fiscalYear.started` | Started &#123;date&#125; | بدأت &#123;date&#125; |
+| `fiscalYear.openingCash` |  · Opening cash &#123;amount&#125; |  · النقد الافتتاحي &#123;amount&#125; |
+| `fiscalYear.noActive` | No active fiscal year configured. | لا توجد سنة مالية نشطة. |
+| `fiscalYear.pastYears` | Past years | السنوات السابقة |
+| `fiscalYear.closed` | Closed &#123;date&#125; | أُغلقت &#123;date&#125; |
+| `specialProjects.title` | Special projects | المشاريع الخاصة |
+| `specialProjects.empty` | No active special projects. | لا توجد مشاريع خاصة نشطة. |
+| `specialProjects.viewPast` | View past projects → | عرض المشاريع السابقة ← |
+| `specialProjects.pastTitle` | Past projects | المشاريع السابقة |
+| `specialProjects.emptyPast` | No past projects yet. | لا توجد مشاريع سابقة بعد. |
+| `specialProjects.closedProject` | Closed project | مشروع مُغلق |
+| `specialProjects.closed` | Closed &#123;date&#125; | أُغلق &#123;date&#125; |
+| `specialProjects.collected` | Collected | المُحصَّل |
+| `specialProjects.apartmentDues` | Apartment dues | مستحقات الشقق |
+| `specialProjects.noApartments` | No apartments configured yet. | لم تُضبط أي شقق بعد. |
+| `specialProjects.table.apt` | Apt | الشقة |
+| `specialProjects.table.share` | Share | الحصة |
+| `specialProjects.table.paid` | Paid | المدفوع |
+| `specialProjects.table.remaining` | Remaining | المتبقي |
+| `directory.title` | Resident directory | دليل السكان |
+| `directory.subtitle` | Who's in the building, with the contact details on file. | من في المبنى، مع بيانات التواصل المسجّلة. |
+| `directory.empty` | No residents have joined yet. | لم ينضم أي ساكن بعد. |
+| `conciergeSubmissions.title` | Concierge submissions | طلبات الناطور |
+| `conciergeSubmissions.reviewTitle` | Review submission | مراجعة الطلب |
+| `conciergeSubmissions.countZero` | No pending submissions. New ones from the concierge appear here for review. | لا توجد طلبات بانتظار المراجعة. الطلبات الجديدة من الناطور تظهر هنا للمراجعة. |
+| `conciergeSubmissions.countPending` | &#123;count, plural, one &#123;# submission pending your review.&#125; other &#123;# submissions pending your review.&#125;&#125; | &#123;count, plural, zero &#123;# طلب بانتظار مراجعتك.&#125; one &#123;طلب واحد بانتظار مراجعتك.&#125; two &#123;طلبان بانتظار مراجعتك.&#125; few &#123;# طلبات بانتظار مراجعتك.&#125; many &#123;# طلباً بانتظار مراجعتك.&#125; other &#123;# طلب بانتظار مراجعتك.&#125;&#125; |
+| `conciergeSubmissions.submittedBy` | Submitted by &#123;name&#125; | قدّمه &#123;name&#125; |
+
+## `setup` — 95 strings
+
+The 6-step setup wizard.
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `common.continue` | Continue | متابعة |
+| `common.continuing` | Continuing... | عم نكمّل... |
+| `common.done` | Done | تمّ |
+| `common.saving` | Saving... | عم نحفظ... |
+| `common.cancel` | Cancel | إلغاء |
+| `common.delete` | Delete | حذف |
+| `common.deleting` | Deleting... | عم نحذف... |
+| `common.required` | Required | مطلوب |
+| `common.unnamed` | (unnamed) | (بلا اسم) |
+| `stepIndicator` | STEP &#123;n&#125; OF &#123;total&#125; | الخطوة &#123;n&#125; من &#123;total&#125; |
+| `basics.title` | Community basics | أساسيات المجتمع |
+| `basics.subtitle` | Tell us about your community. You can change any of this later. | احكينا عن مجتمعك. فيك تغيّر أي شي من هي المعلومات لاحقاً. |
+| `basics.nameLabel` | Community name | اسم المجتمع |
+| `basics.fiscalYearLabel` | Fiscal year starts in | السنة المالية بتبلّش بشهر |
+| `basics.fiscalYearLockedNote` | Fiscal year start month is locked after budget setup. | شهر بداية السنة المالية بينقفل بعد ما تعمل إعدادات الموازنة. |
+| `basics.continueError` | Couldn’t continue: &#123;error&#125; | ما قدرنا نكمّل: &#123;error&#125; |
+| `structure.title` | Building structure | هيكلية المبنى |
+| `structure.subtitle` | Most communities are a single building. Choose multiple buildings if your community has more than one — you can change this later. | أغلب المجتمعات بتكون مبنى واحد. اختار عدّة مباني إذا مجتمعك أكتر من مبنى — فيك تغيّر هيدا لاحقاً. |
+| `structure.legend` | Building structure | هيكلية المبنى |
+| `structure.singleOption` | Single building | مبنى واحد |
+| `structure.multiOption` | Multiple buildings | عدّة مباني |
+| `structure.autoCreateNote` | On Continue, a single building named "&#123;name&#125;" will be created. | لمّا تضغط متابعة، رح ينعمل مبنى واحد باسم "&#123;name&#125;". |
+| `structure.addBuilding` | + Add building | + ضيف مبنى |
+| `structure.buildingNameLabel` | Building name | اسم المبنى |
+| `structure.villaNameLabel` | Villa name | اسم الفيلا |
+| `structure.deleteBuildingAriaLabel` | Delete this building | احذف هالمبنى |
+| `structure.isBuildingOrVilla` | Building or villa? | مبنى أو فيلا؟ |
+| `structure.kindBuilding` | Building | مبنى |
+| `structure.kindVilla` | Villa | فيلا |
+| `structure.thisIsABuilding` | This is a building. | هيدا مبنى. |
+| `structure.thisIsAVilla` | This is a villa. | هيدي فيلا. |
+| `structure.collapseTitle` | Switch to single mode? | تحوّل لوضع المبنى الواحد؟ |
+| `structure.collapseBody` | You'll keep one building and delete the others. Pick which to keep: | رح تخلّي مبنى واحد وتحذف الباقيين. اختار أيّا بدّك تخلّي: |
+| `structure.collapseLegend` | Keep which building? | أيّا مبنى بدّك تخلّي؟ |
+| `structure.collapseConfirm` | Keep selected building, delete the rest | خلّي المبنى المختار واحذف الباقي |
+| `structure.buildingNotFoundError` | Selected building not found | المبنى المختار مش موجود |
+| `apartments.title` | Apartments | الشقق |
+| `apartments.subtitle` | List each apartment, its share of expenses, and the resident. You can change all of this later. | عدّد كل شقة، حصّتها من المصاريف، والساكن فيها. فيك تغيّر كل هالشي لاحقاً. |
+| `apartments.needNewBuilding` | Need a new building? | بدّك مبنى جديد؟ |
+| `apartments.goBackToPreviousStep` | Go back to the previous step. | ارجع للخطوة السابقة. |
+| `apartments.buildingCount` | &#123;count, plural, one &#123;# apartment&#125; other &#123;# apartments&#125;&#125; | &#123;count, plural, one &#123;شقة وحدة&#125; two &#123;شقتين&#125; few &#123;# شقق&#125; many &#123;# شقة&#125; other &#123;# شقة&#125;&#125; |
+| `apartments.totalShare` | total share &#123;total&#125; | مجموع الحصص &#123;total&#125; |
+| `apartments.noApartmentsYet` | No apartments yet. Click below to add one. | ما في شقق بعد. اضغط تحت لتضيف وحدة. |
+| `apartments.addApartment` | + Add apartment | + ضيف شقة |
+| `apartments.sectionApartment` | APARTMENT | الشقة |
+| `apartments.sectionResident` | RESIDENT | الساكن |
+| `apartments.labelLabel` | Label | الرمز |
+| `apartments.shareLabel` | Share of 1,000 | الحصة من ١٬٠٠٠ |
+| `apartments.deleteApartmentAriaLabel` | Delete this apartment | احذف هالشقة |
+| `apartments.shareErrorPositive` | Must be positive | لازم يكون رقم موجب |
+| `apartments.shareErrorRange` | Must be 0 to 1000 | لازم يكون بين ٠ و١٠٠٠ |
+| `apartments.shareErrorNotNumeric` | Enter a number | أدخل رقم |
+| `apartments.residentNameLabel` | Name | الاسم |
+| `apartments.residentMobileLabel` | Mobile | الموبايل |
+| `apartments.residentEmailLabel` | Email | الإيميل |
+| `apartments.alsoOwns` | Also owns: &#123;labels&#125; | كمان عندو: &#123;labels&#125; |
+| `apartments.emailInvalidWarning` | Looks invalid — saving anyway | شكلو غلط — بس رح نحفظو |
+| `apartments.deleteDialogTitle` | Delete apartment &#123;label&#125;? | تحذف الشقة &#123;label&#125;؟ |
+| `apartments.deleteDialogBody` | The apartment is removed from your community. If its resident lives in another apartment too, their contact info stays. Otherwise their record stays for cleanup later. | الشقة رح تنشال من مجتمعك. إذا ساكنها بيسكن بشقة تانية كمان، معلومات التواصل تبعو بتضل. غير هيك سجلّو بيضل للتنظيف لاحقاً. |
+| `budget.title` | Budget | الموازنة |
+| `budget.subtitleSetup` | Set your annual budget for each category. Saken computes the rest. You’ll log actual expenses from the dashboard once setup is done. | حدّد موازنتك السنوية لكل فئة. ساكن بيحسب الباقي. رح تسجّل المصاريف الفعلية من اللوحة بعد ما تخلّص الإعداد. |
+| `budget.subtitlePostSetup` | Adjust your annual budget for each category. Changes save automatically. | عدّل موازنتك السنوية لكل فئة. التغييرات بتنحفظ تلقائياً. |
+| `budget.fiscalYear` | Fiscal year: &#123;period&#125; | السنة المالية: &#123;period&#125; |
+| `budget.fromRolloverBanner` | Your new year’s budget was copied from last year — adjust anything that’s changed, or you’re all set. | موازنة سنتك الجديدة تنسخت من السنة الماضية — عدّل أي شي تغيّر، أو إنت جاهز. |
+| `budget.totalAnnualBudget` | Total annual budget | مجموع الموازنة السنوية |
+| `budget.lineCount` | &#123;count, plural, one &#123;# line&#125; other &#123;# lines&#125;&#125; | &#123;count, plural, one &#123;بند واحد&#125; two &#123;بندين&#125; few &#123;# بنود&#125; many &#123;# بند&#125; other &#123;# بند&#125;&#125; |
+| `budget.noLinesYet` | No lines yet. Click below to add one. | ما في بنود بعد. اضغط تحت لتضيف واحد. |
+| `budget.addLine` | + Add line | + ضيف بند |
+| `budget.descriptionLabel` | Description | الوصف |
+| `budget.descriptionPlaceholder` | Description (optional) | الوصف (اختياري) |
+| `budget.rateLabel` | Rate (USD) | السعر (دولار) |
+| `budget.quantityLabel` | Quantity | الكمية |
+| `budget.annual` | Annual | سنوي |
+| `budget.deleteLineAriaLabel` | Delete this budget line | احذف هالبند |
+| `budget.rateErrorPositive` | Must be positive | لازم يكون رقم موجب |
+| `budget.rateErrorNotNumeric` | Enter a number | أدخل رقم |
+| `budget.quantityErrorPositive` | Must be positive | لازم يكون رقم موجب |
+| `budget.quantityErrorNotNumeric` | Enter a number | أدخل رقم |
+| `budget.deleteIdentifierFallback` | this budget line | هالبند |
+| `budget.deleteIdentifierWithCategory` | &#123;amount&#125; in &#123;category&#125; | &#123;amount&#125; بفئة &#123;category&#125; |
+| `budget.deleteDialogTitle` | Delete &#123;identifier&#125;? | تحذف &#123;identifier&#125;؟ |
+| `budget.deleteDialogBody` | This line is removed from your budget. Anything you’ve entered for it will be lost. | هالبند رح ينشال من موازنتك. أي شي دخّلتو إلو رح يضيع. |
+| `cashOnHand.title` | Cash on hand | الكاش الموجود |
+| `cashOnHand.subtitle` | Tell Saken how much cash the building has right now, and when you’re starting from. Saken uses these as the baseline. | احكي لساكن قديش كاش عند المبنى هلّق، ومن إيمتى عم تبلّش. ساكن بيستعمل هالأرقام كنقطة أساس. |
+| `cashOnHand.openingCashLabel` | Opening cash balance | رصيد الكاش الافتتاحي |
+| `cashOnHand.openingCashErrorRequired` | Required | مطلوب |
+| `cashOnHand.openingCashErrorNonNegative` | Enter a non-negative number | أدخل رقم مش سالب |
+| `cashOnHand.asOfDateLabel` | As of date | بتاريخ |
+| `cashOnHand.asOfDateErrorRequired` | Required | مطلوب |
+| `cashOnHand.asOfDateHint` | Expenses and collections dated before this date will appear in your records but won’t change the opening cash on hand — those amounts are already counted in the opening balance you enter above. | المصاريف والتحصيلات يلي تاريخها قبل هالتاريخ رح تبيّن بسجلّاتك بس ما رح تغيّر الكاش الافتتاحي الموجود — هالمبالغ أصلاً محسوبة بالرصيد الافتتاحي يلي بتدخلو فوق. |
+| `review.title` | Review and finish | المراجعة والإنهاء |
+| `review.subtitle` | Take a quick look at everything you’ve entered. Edit any section if something needs changing. When ready, click Finish. | خود نظرة سريعة على كل شي دخّلتو. عدّل أي قسم إذا في شي بدّو تغيير. لمّا تكون جاهز، اضغط إنهاء. |
+| `review.edit` | Edit | تعديل |
+| `review.finish` | Finish | إنهاء |
+| `review.finishing` | Finishing... | عم نخلّص... |
+
+## `specialProjects` — 21 strings
+
+Special-projects pages (list, detail, record, history).
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `list.title` | Special projects | المشاريع الخاصة |
+| `list.newProject` | + New project | + مشروع جديد |
+| `list.emptyPast` | No active special projects. | ما في مشاريع خاصة فعّالة. |
+| `list.emptyActive` | No active special projects. Tap “+ New project” above to start one. | ما في مشاريع خاصة فعّالة. اضغط “+ مشروع جديد” فوق لتبدأ واحد. |
+| `list.viewPast` | View past projects → | عرض المشاريع السابقة → |
+| `history.title` | Past projects | المشاريع السابقة |
+| `history.empty` | No past projects yet. | ما في مشاريع سابقة بعد. |
+| `history.closedOn` | Closed &#123;date&#125; | أُقفل &#123;date&#125; |
+| `history.closedUnknown` | Closed — | أُقفل — |
+| `detail.closedLabel` | Closed project | مشروع مقفل |
+| `detail.collected` | Collected | المحصّل |
+| `detail.edit` | Edit | تعديل |
+| `detail.recordContribution` | Record contribution | تسجيل مساهمة |
+| `detail.apartmentDues` | Apartment dues | مستحقات الشقق |
+| `detail.noApartments` | No apartments configured yet. | ما في شقق مُعدّة بعد. |
+| `detail.colApt` | Apt | شقة |
+| `detail.colShare` | Share | الحصّة |
+| `detail.colPaid` | Paid | المدفوع |
+| `detail.colRemaining` | Remaining | المتبقّي |
+| `record.title` | Record contribution | تسجيل مساهمة |
+| `record.projectLabel` | Project: &#123;name&#125; | المشروع: &#123;name&#125; |
+
