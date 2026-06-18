@@ -1,0 +1,43 @@
+import { Callout } from 'nextra/components'
+
+# Saken
+
+**Saken** is a shared-ledger and budgeted-operations web app for Lebanese residential
+buildings and complexes (5–100 apartments). One resident — the **admin** — runs the
+books. Every other resident can see what they owe and where the money went. A
+**concierge** submits expenses for approval, and an optional **treasurer** shares the
+admin's financial duties.
+
+This site is the comprehensive documentation for the whole Saken project: the Next.js
+web app (`saken`), the standalone NestJS backend (`saken-server`), and the MCP server
+(`saken-mcp`) — written from the source, with an honest account of what ships today and
+what is still on the roadmap.
+
+<Callout type="info">
+**Documenting an MVP, honestly**
+
+Saken is a **pilot-stage MVP**. Core flows are production-tested, but several
+advertised capabilities are partial or stubbed. Throughout these docs, missing or
+incomplete features are called out loudly rather than glossed over. Start with
+[Status & maturity](/introduction/status) for the unvarnished picture.
+</Callout>
+
+## Start here
+
+- [**What is Saken**](/introduction/what-is-saken) — the problem, the pilot, the shape of the product
+- [**Quick tour**](/introduction/quick-tour) — every screen, in order
+- [**Status & maturity**](/introduction/status) — a colour-coded feature audit
+- [**Local setup**](/getting-started/local-setup) — clone, configure Supabase, run it
+- [**Architecture overview**](/architecture/overview) — how the pieces fit together
+- [**Database schema**](/database/schema) — the 15-entity ledger, verified against production
+
+## The repositories
+
+| Repo | What it is |
+| --- | --- |
+| [`saken`](https://github.com/Saken-Community-Management/saken) | The Next.js 16 web app — the product today |
+| [`saken-server`](https://github.com/Saken-Community-Management/saken-server) | Standalone NestJS API (built, not yet wired to the frontend) |
+| [`saken-mcp`](https://github.com/Saken-Community-Management/saken-mcp) | MCP server exposing Saken to LLM clients |
+
+> Saken is built with Next.js 16, React 19, TypeScript (strict), Tailwind CSS 4, and
+> Supabase (Postgres + Auth + Storage), and deploys to Vercel.

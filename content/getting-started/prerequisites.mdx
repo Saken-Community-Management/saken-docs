@@ -1,0 +1,59 @@
+import { Callout } from 'nextra/components'
+
+# Prerequisites
+
+What you need to run Saken locally and contribute to it.
+
+## Toolchain
+
+| Tool | Version | Notes |
+| --- | --- | --- |
+| **Node.js** | 18+ (CI uses 22) | The web app builds on Node 18 or later; the CI pipeline pins **Node 22**. |
+| **npm** | bundled with Node | Saken uses `npm` (there is a committed `package-lock.json`). |
+| **Git** | any recent | — |
+| **Supabase CLI** | `^2.98` | Installed as a dev dependency of `saken`; used for migrations. |
+
+The web app's runtime stack, from `saken/package.json`:
+
+- **Next.js 16.2.6** (App Router) · **React 19.2.4** · **TypeScript 5** (`strict`)
+- **Tailwind CSS 4** (via `@tailwindcss/postcss`)
+- **Supabase** — `@supabase/ssr` + `@supabase/supabase-js`
+- **`@react-pdf/renderer`** for receipts and YTD reports
+- **Vitest** for the unit suite
+
+<Callout type="warning">
+**This is not the Next.js you know**
+
+`saken/AGENTS.md` carries a standing warning: this is **Next.js 16**, which has breaking
+changes versus older releases. Read the relevant guide under `node_modules/next/dist/docs/`
+before writing app code, and heed deprecation notices. Do not assume App-Router patterns
+from Next 13/14 carry over unchanged.
+</Callout>
+
+## Accounts & services
+
+To run the full product you need a **Supabase project** (Postgres + Auth + Storage). The
+production project is `zrjeehvlvhjaafhkxgsw` in `eu-central-1`; for local work you create
+your own project (free tier is plenty for a pilot-sized community).
+
+Optional / for specific features:
+
+- **Google Cloud Console** — OAuth client for *Continue with Google* (see the build
+  plan's step 11).
+- **An SMS provider (Twilio)** — for phone/WhatsApp OTP. Configured in Supabase Auth →
+  Providers → Phone. Phone auth is gated behind `NEXT_PUBLIC_PHONE_AUTH_ENABLED`.
+- **Resend** — the planned provider for invitation emails. *Not yet wired* — see
+  [Email & WhatsApp delivery](/api/delivery).
+- **Vercel** — hosting for the web app (`saken.com`). App deploys happen on push to
+  `main`.
+
+<Callout type="info">
+**Local Docker note**
+
+Per `docs/CI-CD.md`, local Docker was broken on the original dev laptop, so
+`supabase start` / `db reset` (which need Docker) run **only in CI**. You can still run
+the Next.js app against a remote (cloud) Supabase project without Docker — that is the
+normal local workflow.
+</Callout>
+
+Next: [Local setup](/getting-started/local-setup).

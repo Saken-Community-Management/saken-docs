@@ -1,0 +1,117 @@
+import { Callout, Steps } from 'nextra/components'
+
+# About this site
+
+How this documentation site is built, and how to maintain it.
+
+## Built with Nextra
+
+This site is built with **[Nextra 4](https://nextra.site)** — the Next.js (App Router)
+documentation framework. Nextra ships, out of the box, everything a docs site needs: a
+clean sidebar + top nav, built-in **Pagefind** search, dark mode, syntax highlighting, MDX,
+and **Mermaid** diagram support. That lets this site focus on *content* rather than on
+wiring a custom stack. Because it runs on Next.js, it also hosts the **Supabase auth gate**
+(below) that keeps the docs internal-only.
+
+| Piece | Choice |
+| --- | --- |
+| Framework | Nextra `^4.6` + `nextra-theme-docs` (Next.js 16, React 19) |
+| Content | MDX in `content/` (mirrors the sidebar) |
+| Diagrams | Mermaid (` ```mermaid ` code blocks, built into Nextra) |
+| Search | Pagefind, generated at build time |
+| Auth | Supabase OAuth + email allowlist (Next `proxy.ts` gate) |
+| Hosting | Vercel (Next.js, auto-detected) |
+
+<Callout type="info">
+**Why the move from Vocs to Nextra**
+
+The site was originally built with Vocs (React + Vite, static). It was rebuilt on Nextra 4
+so the docs could run as a real Next.js app and sit behind the same **Supabase email
+allowlist** the `saken-admin` console uses — Vocs is static-only and cannot gate access.
+The content (MDX, Mermaid, callouts, steps) ported across with only mechanical syntax
+changes.
+</Callout>
+
+## Project layout
+
+```
+saken-docs/
+├── next.config.mjs           # Nextra wrapper around Next.js config
+├── mdx-components.js          # merges nextra-theme-docs MDX components
+├── proxy.ts                  # Next 16 auth gate (the renamed middleware)
+├── app/
+│   ├── layout.tsx            # root <html>/<body> + Nextra <Head>
+│   ├── (docs)/               # docs route group (Nextra Layout + catch-all)
+│   ├── (auth)/               # /login + /denied (standalone, ungated)
+│   └── auth/                 # /auth/callback + /auth/signout (OAuth)
+├── lib/
+│   ├── supabase/             # server.ts + client.ts (auth-only clients)
+│   └── auth/admin-allowlist.ts  # SAKEN_ADMIN_ALLOWLIST check
+├── content/                  # all MDX content + _meta.ts (sidebar order)
+└── public/                   # icon.svg, logo.svg (Saken brand marks)
+```
+
+The sidebar grouping and order live in the `content/**/_meta.ts` files. The auth gate only
+needs three env vars — see [Secrets & environment](/operations/secrets): docs have **no
+database**, so there is no service-role client or key.
+
+## How to update content
+
+<Steps>
+
+### Edit the MDX
+
+Find the page under `content/` (the path mirrors the URL) and edit it. Use the
+**"Suggest changes to this page"** link in any page's footer to jump straight to the file
+on GitHub.
+
+### Preview locally (optional)
+
+```bash
+npm install
+npm run dev      # local preview with hot reload (port 3002)
+npm run build    # production build
+npm run typecheck  # tsc --noEmit
+```
+
+### Push to `main`
+
+Vercel builds and deploys the site automatically on push. The live site updates within a
+couple of minutes.
+
+</Steps>
+
+<Callout type="info">
+**Internal access only**
+
+The site is gated by the `proxy.ts` auth check: every route except `/login`, `/denied`, and
+`/auth/*` requires a signed-in account whose email is on `SAKEN_ADMIN_ALLOWLIST`. This is
+the same model the `saken-admin` console uses.
+</Callout>
+
+## How it's deployed
+
+Vercel auto-detects the Next.js app and runs `next build` on push to `main`, then serves it
+with the auth gate active. The three required env vars (`NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SAKEN_ADMIN_ALLOWLIST`) are configured in the Vercel
+project settings.
+
+## Sourcing & honesty
+
+Every substantive claim here is sourced from the Saken repositories: the design docs
+(`Saken-v1-Design-Specification.docx`, `-Build-Plan.docx`, `-Executive-Summary.docx`), the
+audits (`AUDIT-2026-06-14.md`, `Saken-Feature-Audit-2026-06-16.docx`), the verified schema
+docs (`SCHEMA-current-state.md`, `SCHEMA-live-reconciliation-2026-06-14.md`), the
+`CLAUDE.md` / `ARCHITECTURE.md` / `DECISIONS.md` references, the prototype, and the source
+code + git history itself. Where the docs and the code disagreed (notably **invitation
+delivery**, which an audit called "live" but the code shows stubbed), this site follows the
+**code** and says so. Missing or partial features are flagged with callouts rather than
+glossed over.
+
+## Known TODOs for this site
+
+- **Screenshots** — the site is prose-only; the `saken/public` folder has no captured
+  screens. Add screenshots from a seeded demo community ([Quick tour](/introduction/quick-tour)).
+- **Brand assets** — the logo/icon here are simple SVG marks created for the docs; replace
+  with official Saken brand assets if/when they exist.
+- **OG image** — no custom Open Graph image yet; add a Saken-branded one.

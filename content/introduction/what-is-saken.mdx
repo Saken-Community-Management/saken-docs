@@ -1,0 +1,92 @@
+import { Callout } from 'nextra/components'
+
+# What is Saken
+
+Saken (`saken.com`) is a **shared ledger and budgeted-operations tool** for residential
+communities — low-rise buildings and small complexes in Lebanon, 5–100 apartments,
+where one resident volunteers to run the community's finances. It is a **web-first PWA**:
+it installs to a phone home screen, works on desktop, and has no native app and no app
+store.
+
+## The problem it replaces
+
+> Today this runs on a WhatsApp group, a notebook, and trust. The admin carries the
+> building's whole financial picture in their head. Residents don't know what they owe.
+> Late payers aren't visible. There's no way to plan for the year, allocate costs
+> fairly, or hand the role off cleanly.
+>
+> — *Saken-v1-Design-Specification.docx, §1 Locked Scope*
+
+Saken is simultaneously a **transparency tool for residents** (they can see what they
+owe and where money went) and a **convenience tool for the admin** (a place to plan the
+year, track spending against a budget, and run collections without recreating the
+picture each month). The admin role is part-time and unpaid; the app's job is to make
+it manageable.
+
+## What v1 does
+
+From the locked v1 scope, Saken does twelve things:
+
+1. **Set up the community** — a wizard captures structure (single building or complex)
+   and auto-generates the apartment grid.
+2. **Set an annual budget** — a fixed list of categories, each with `rate × quantity`
+   line items, auto-divided across apartments by share.
+3. **Amend the budget** anytime — every amendment writes a dated, versioned snapshot;
+   recalculation is forward-going only.
+4. **Manage apartments and shares** — shares are proportional weights (nominally out of
+   1000) at the complex level.
+5. **Sign admins up easily** — Google, email magic-link, or phone/WhatsApp OTP. No
+   passwords.
+6. **Record payments and log expenses** — admin directly, or concierge submits for
+   approval.
+7. **Manage the concierge** — a restricted, Arabic right-to-left surface that can only
+   submit expenses.
+8. **Approve concierge submissions** — the admin reviews, edits, approves, or rejects.
+9. **Create special collections / projects** for one-off costs outside the annual
+   budget.
+10. **Roll over the fiscal year** — cash carries forward; surplus can reduce next year's
+    collection.
+11. **Reset the fiscal year** if needed (destructive, with a typed-confirmation gate).
+12. **Export PDF reports** suitable for the building's WhatsApp group.
+
+## Who runs it: roles
+
+Saken started with **three roles** and grew a fourth:
+
+- **Admin** — a resident with full edit rights who runs the books.
+- **Resident** — read-only view of their apartment, the dashboard, and every other
+  apartment's status.
+- **Concierge** — a restricted Arabic-UI role that can only submit expenses for
+  approval.
+- **Treasurer** — added after the original spec; shares the admin's financial powers
+  (record payments/expenses, approve submissions) without being the community owner.
+
+See [Roles & role stacking](/concepts/roles) for how a single person can hold more than
+one of these at once.
+
+## Pilot target & success criterion
+
+The pilot targets **2–5 communities** (buildings or complexes), 5–100 apartments each.
+The success criterion is deliberately concrete:
+
+> 2–5 real communities use it for one full fiscal year — budget set at the start,
+> payments and expenses logged throughout, year-end PDF generated. If that happens, v1
+> worked.
+
+## What v1 explicitly does **not** do
+
+Online payments or bank integration · a single user in multiple communities (multi-
+community was later partially added — see [Multi-community](/concepts/multi-community))
+· tenant-vs-owner distinction · any non-USD currency · system-calculated late fees · a
+late-payer warning flag · voting/decision logs · in-app announcements or chat · cash
+reconciliation/variance/handover logs · savings pots beyond special collections ·
+resident self-signup · custom dashboards/report templates · full edit-version history of
+payments/expenses · an Arabic UI for residents and admins · push notifications.
+
+<Callout type="info">
+**Currency & language**
+
+Saken is **USD-only** — every amount renders with a `$` prefix, and money columns are
+`NUMERIC(12,2)` end-to-end (never floats). The admin/resident UI is **English**; the
+concierge surface is **Arabic, right-to-left**.
+</Callout>

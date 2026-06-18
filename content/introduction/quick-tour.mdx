@@ -1,0 +1,104 @@
+import { Callout } from 'nextra/components'
+
+# Quick tour
+
+A walk through Saken's surfaces, screen by screen. The flow below mirrors the
+behavioural reference in `docs/Saken-v1-Prototype.html` (the clickable mockup from the
+design phase) and the routes that actually ship in `saken/src/app/`.
+
+<Callout type="info">
+**Screenshots**
+
+This site ships **without screenshots** — the repository's `public/` folder contains
+only SVG placeholders, not captured screens. The walkthrough below is prose-based. To
+capture real screens, run the app locally ([Local setup](/getting-started/local-setup))
+and grab the routes named in each step. *TODO: add screenshots once a seeded demo
+community is available.*
+</Callout>
+
+## Public surface
+
+**Landing page (`/`)** — A single hero CTA, *"Start your community"*, plus a small
+*"Already have an account? Sign in →"* escape hatch. Both route to the unified auth
+screen. A dimmed *"See how it works — coming soon"* video placeholder sits below.
+
+**Auth screen (`/auth`)** — Three options in order: **Continue with Google**, **Continue
+with email**, **Continue with WhatsApp**. New and returning users share one screen;
+post-auth routing decides where they land.
+
+## Setup wizard (admin, first run)
+
+The wizard writes to the most tables of any flow, so it stress-tests the data model:
+
+1. **`/setup/basics`** — community name, your name, fiscal-year start month, opening cash
+   on hand.
+2. **`/setup/structure`** — single building or complex.
+3. **`/setup/apartments`** — an auto-generated apartment grid (floors × apartments per
+   floor). Each row is editable inline: label, resident name, phone, email, share,
+   opening balances. A running **shares total** shows at the top; the admin's own row is
+   marked *"This is me."*
+4. **`/setup/budget`** — budget categories as accordions, each holding `rate × quantity`
+   lines. The annual total computes live.
+5. **`/setup/review`** → **`/dashboard`**.
+
+## Admin core
+
+**Dashboard (`/dashboard`)** — A pending-submissions banner, a 2×2 tile grid (Cash on
+hand · Annual budget · Collected YTD · Spent YTD), active special collections, and the
+apartment-contributions list (each apartment shows *paid up / owes $X / ahead $X*).
+Detail pages hang off the tiles: `/dashboard/cash`, `/dashboard/budget`,
+`/dashboard/collections`, `/dashboard/expenses`.
+
+**Record a payment (`/payments/new`)** — Search-as-you-type apartment selector that
+shows the current balance, a purpose dropdown (annual dues + any active special
+collection), amount, date, notes. Saving assigns a **sequential receipt number** and
+opens the digital receipt with *Share* and *Done*.
+
+**Log an expense (`/expenses/new`)** — Vendor, category, amount, invoice period
+(month + year), date, and an optional invoice photo (downscaled client-side before
+upload). Admin-logged expenses post as `approved` immediately.
+
+**Apartments management (`/dashboard/apartments`)** — Per-apartment status, balance,
+edit, and a *Share link* sheet that generates the resident's magic link.
+
+**Special collections / projects (`/dashboard/special-projects`)** — One-off projects
+outside the annual budget, each with per-apartment shares and contribution tracking.
+
+## Approval workflow
+
+**Pending queue (`/dashboard/concierge-submissions`)** and **review detail** — the admin
+(or treasurer) sees concierge submissions, can edit every field, then **Approve & post**
+or **Reject** with a required reason.
+
+## Concierge surface (Arabic, RTL)
+
+**`/concierge`** — a single big *"إضافة مصروف جديد"* (add a new expense) button and a list
+of recent submissions with status pills (*قيد المراجعة* = under review). The submit form
+(`/concierge/submit`) has six fields; the confirmation screen shows the pending state.
+The concierge can edit a submission while it is pending, but it locks after
+approval/rejection. This surface **never** shows balances, payments, or the dashboard.
+
+## Resident surface
+
+**`/r/{apartmentId}/{token}`** (magic-link, no login) and the authenticated
+**`/resident/*`** mirror — a *"You owe $X"* headline, the apartment's payment history,
+relevant special collections, and a read-only community summary (cash, budget, collected
+%). Residents can see every apartment's status by label and name, but cannot write
+anything.
+
+## Year-end & reports
+
+**Year-end review (`/dashboard/fiscal-year/rollover`)** — cash on hand, surplus/deficit,
+per-apartment carryovers, and an *apply surplus to next year* field. Confirming opens the
+next fiscal year and archives the current one.
+
+**Reset fiscal year** — a destructive admin action behind a *type-the-community-name*
+gate.
+
+**PDF report** — a server-rendered report (via `@react-pdf/renderer`): summary tiles, a
+*where-the-money-went* category table, active collections, amendment footnotes, then
+apartment balances and payment/expense lists. The admin downloads it and shares it
+manually to the WhatsApp group.
+
+Continue to [Status & maturity](/introduction/status) to see which of these are fully
+done versus partial.

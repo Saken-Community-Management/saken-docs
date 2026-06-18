@@ -1,0 +1,58 @@
+import { Callout } from 'nextra/components'
+
+# Monitoring & logs
+
+An honest account of Saken's observability today: **minimal**. This is a known gap, not a
+built-out capability.
+
+## What exists
+
+- **Vercel function logs** — the web app's server actions and route handlers log through
+  `console.error`, visible in the Vercel dashboard's runtime logs.
+- **Supabase logs** — Postgres, Auth, and Storage logs in the Supabase dashboard
+  (query/error logs, auth events).
+- **GitHub Actions run logs** — the CI app + migration-replay + deploy-migrations jobs;
+  the migration approval gate also emails reviewers.
+- **The database as audit trail** — `budget_versions` (immutable budget snapshots),
+  `created_at`/`updated_at` on most tables, soft-delete tombstones (`deleted_at`), and
+  preserved `receipt_number` gaps all leave a partial trail you can query directly.
+
+## What's missing
+
+<Callout type="warning">
+**`console.error` is the entire logging strategy**
+
+There is **no aggregation, alerting, or error tracking** (audit L-C1). Given Saken's own
+history of silent `42501` (permission-denied) failures, a systemic failure can stay
+invisible until someone reads raw Vercel logs. The audit's recommendation: route through
+**Sentry** (or Logflare) before scaling. Adding Sentry's free tier is also on the
+build plan's pre-pilot checklist.
+</Callout>
+
+Other gaps:
+
+- **No uptime/health monitoring** wired up, though `saken-server` exposes `GET /health`.
+- **No storage-orphan cleanup** — receipt photos of soft-deleted expenses accumulate with
+  no janitor job (audit M-OPS1).
+- **No in-app support channel** — for the pilot, "support" is the developer's WhatsApp
+  number (build plan).
+
+## Recommended before scaling
+
+| Item | Why |
+| --- | --- |
+| Add **Sentry** | Catch crashes and silent permission failures you won't see in testing |
+| Wire a **log sink** (Logflare/Sentry breadcrumbs) | Make 42501-class failures visible |
+| **Health-check monitoring** on the backend once wired | Detect outages |
+| A **storage-orphan cleanup** job | Reclaim space from deleted-expense photos |
+| **Supabase Pro backups** ($25/mo) | Daily backups — non-negotiable for a money app |
+
+## The operating principle
+
+Saken's hardest-won operational lesson is observability-adjacent: **the live database is
+ground truth.** Several real problems (the `roles_readable` PII leak, migration drift) were
+invisible from the code and the logs and only surfaced by **introspecting production
+directly** via the Supabase Management API. Until richer monitoring exists, periodic
+live-DB introspection (the method in `docs/SCHEMA-live-reconciliation-2026-06-14.md`)
+remains the most reliable way to know the true state. See
+[Migration history](/database/migrations).

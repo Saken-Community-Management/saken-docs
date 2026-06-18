@@ -1,0 +1,78 @@
+import { Callout } from 'nextra/components'
+
+# Migration history
+
+The schema is built by **47 ordered SQL migrations** (`0001` → `0047`) in
+`saken/supabase/migrations/`. The files are the source of truth for the schema's *shape*;
+the **live database is the source of truth for reality** — a distinction Saken learned the
+hard way (see the bottom of this page).
+
+<Callout type="info">
+**Browse the files**
+
+The full migration set lives in the repo:
+[`saken/supabase/migrations/`](https://github.com/Saken-Community-Management/saken/tree/main/supabase/migrations).
+Each file follows a house style: `BEGIN; … COMMIT;` wrapping the change, plus a
+self-verifying block that `RAISE EXCEPTION`s if the post-state is wrong.
+</Callout>
+
+## The arc, by theme
+
+| Range | Theme |
+| --- | --- |
+| `0001` | Initial schema — the 15 entities, RLS enabled with permissive stubs |
+| `0002`–`0008` | Data-API grants, setup wizard, budget setup, editable payments/expenses + storage, view tokens, service-role grants |
+| `0009`–`0015` | Category overhaul (ENUM → 10 TEXT keys), YTD-snapshot migration, opening-cash date anchor, prior-period flags, expense line-tagging |
+| `0016`–`0024` | **Invitations + role system** — invitations table, language, the `roles` table + apartment tokens, dropping old `users` columns, `accept_invitation`, real **admin/resident RLS policies** |
+| `0025`–`0026` | **Treasurer role** + storage policies for treasurer/concierge |
+| `0027`–`0031` | **Fiscal-year rollover** — groundwork, the `rollover_fiscal_year` RPC, "Path C" date pinning |
+| `0032`–`0042` | Multi-community: `active_complex_id`, active-aware helpers, `create_complex_with_admin`, dual-row-safe lookups, soft-delete (`deleted_at`), `exit_community` / `delete_community` RPCs, service-role grants |
+| `0043` | **Phone identity** — email-OR-phone branch in all 5 RLS helpers + 5 RPCs |
+| `0044`–`0047` | **Hardening** — `uniq_authenticated_phone`, forbid empty identity strings, deterministic identity resolvers, **drop the `roles_readable` leak** |
+
+## The hardening tail (0044–0047)
+
+These four migrations close the highest-priority findings from the 2026-06-14 audit and
+live-DB reconciliation:
+
+| Migration | What it fixes |
+| --- | --- |
+| `0044_uniq_authenticated_phone` | Adds the missing phone-uniqueness guard (audit **H-S1**) before phone auth ships |
+| `0045_forbid_empty_identity_strings` | Prevents empty-string email/phone collisions across identities |
+| `0046_deterministic_identity_resolvers` | Makes identity lookups order-independent (no `LIMIT 1` ambiguity) |
+| `0047_drop_roles_readable_view` | Removes the critical PII-leaking view (see below) |
+
+## "Repair the database, the docs lag" — the lessons
+
+Two stories shape Saken's migration discipline:
+
+<Callout type="error">
+**The `roles_readable` leak**
+
+A view `public.roles_readable` existed in production that **no migration created** —
+almost certainly hand-made during a Dashboard debugging session. It was *not*
+`security_invoker`, so it bypassed RLS, and `SELECT` was granted to **`anon`** — the public
+key shipped to every browser. Anyone on the internet could `curl` it and receive **every
+admin/treasurer/concierge's name + email + role + community**, no login required. It was
+**invisible from the repository**. Found by introspecting the live DB on 2026-06-14, it was
+dropped in migration `0047` (commit `fe25f53`). This single finding is why the team treats
+**the live DB as ground truth**.
+</Callout>
+
+<Callout type="warning">
+**The repo can't fully reproduce the live DB (improving)**
+
+Migrations `0001`–`0043` were **applied by hand** via the Dashboard SQL Editor, so the
+CLI's tracking table was empty and a few objects (grants, ownership, a couple of
+Dashboard-created objects) drifted from the files. The service-role write grants were
+*"bitten 4×"* (migrations `0029`/`0032`/`0035`/`0042`). The fix in progress: a
+**CI migration-replay** job that replays `0001`→latest from scratch on every PR (catching
+drift automatically), plus a baseline step. See [CI/CD](/operations/ci-cd) and
+[Migrations workflow](/operations/migrations-workflow).
+</Callout>
+
+## Applying migrations
+
+For a fresh project, apply `0001`→`0047` **in order** (Dashboard SQL Editor, or the CLI).
+`db push` is **forward-only** — it never edits or reverts an applied migration; corrections
+are new migrations. See [Database migrations workflow](/operations/migrations-workflow).

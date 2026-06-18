@@ -1,0 +1,75 @@
+import { Callout } from 'nextra/components'
+
+# saken-server endpoints
+
+`saken-server` is a NestJS API whose endpoints **mirror the web app's server actions**, so
+the web app can migrate to it incrementally and a React Native app can build against it
+directly.
+
+<Callout type="warning">
+**Built, not yet wired**
+
+This backend **compiles and runs in isolation but is not connected to the web app yet** —
+it's the tier in waiting. Treat this page as the endpoint contract, not a description of
+production traffic. See [Backend & MCP](/architecture/backend).
+</Callout>
+
+## Auth
+
+- **Web + React Native:** send the Supabase access token as `Authorization: Bearer
+  <token>`. `JwtAuthGuard` validates it (works for HS/RS/ES signing keys). A per-request
+  Supabase client carrying that JWT preserves RLS.
+- **Residents:** no login — the magic-link path `/r/:apartmentId/:token/*` is validated by
+  `ResidentTokenGuard` (indistinguishable 404 on any failure).
+- Health: `GET /health` → `{ "status": "ok" }`. Runs on port `4000`.
+
+## Endpoint map
+
+| Method & path | Web equivalent |
+| --- | --- |
+| `GET /me` · `PATCH /me/language` · `PUT /me/active-complex` | profile · `updateMyLanguage` · `setActiveComplex` |
+| `POST /communities/:id/exit` · `DELETE /communities/:id` | `exitCommunity` · `deleteCommunity` (RPCs) |
+| `POST /complexes` | `create_complex_with_admin` |
+| `POST /complexes/:id/buildings` · `POST /buildings/:id/apartments` · `PATCH /apartments/:id` · `POST /residents` | setup wizard hooks |
+| `POST/PATCH/DELETE /payments` · `POST /payments/pre-saken` · `GET /payments/form-data` | `src/lib/payments/*` |
+| `POST/PATCH/DELETE /expenses` · `POST /expenses/pre-saken` | `src/lib/expenses/*` |
+| `GET /budget/line-options` | `fetchBudgetLineOptions` |
+| `POST/PATCH /concierge/submissions` · `GET /concierge/submissions[/:id]` | `src/lib/concierge/*` |
+| `GET /admin/submissions[/count\|/:id]` · `POST /admin/submissions/:id/approve\|reject` | `src/lib/admin-submissions/*` |
+| `GET/POST/PATCH /special-projects[...]` · `PUT /:id/shares` · `POST /:id/contributions` · `POST /:id/close` | `src/lib/special-projects/*` |
+| `GET /invitations/validate\|context` · `POST /invitations[/:id/revoke\|/:id/reinvite\|/accept]` | `src/lib/invitations/*` |
+| `GET /fiscal-year` · `POST /fiscal-year/rollover` | `src/lib/fiscal/*` (RPC) |
+| `GET /summary` | `fetchSummaryData` |
+| `GET /reports/ytd` | admin YTD PDF |
+| `GET /r/:apartmentId/:token/summary\|reports/ytd` | resident magic-link routes |
+
+## Module layout
+
+```
+src/
+  config/   env validation (zod)
+  supabase/ per-request user (RLS) + service-role + anon client factory
+  auth/     JwtAuthGuard, ResidentTokenGuard, AuthContextService, TokensService
+  domain/   shared enums + the 10 category keys
+  common/   Postgrest → HTTP error mapping
+  summary/ budget/ fiscal/ payments/ expenses/ concierge/
+  admin-submissions/ special-projects/ invitations/ account/ setup/ reports/ resident/ health/
+```
+
+## Configuration
+
+| Var | Purpose |
+| --- | --- |
+| `SUPABASE_URL` | the same project the web app uses |
+| `SUPABASE_ANON_KEY` | per-request RLS client + token validation |
+| `SUPABASE_SERVICE_ROLE_KEY` | narrow service-role operations only |
+| `PORT` | HTTP port (default `4000`) |
+| `CORS_ORIGINS` | comma-separated allowlist, or `*` |
+| `PUBLIC_API_URL` | absolute-link base in responses |
+
+## Intentionally deferred
+
+Per the backend README: wiring to the frontend; **email/WhatsApp invite delivery**
+(stubbed in the web app too); per-`?fy=` PDF reports (the web app also always renders the
+active FY); budget version-history read endpoints; and a fast-path local JWT verifier to
+replace the per-request `auth.getUser` network call.

@@ -3,19 +3,29 @@
   "version": "1.0.0",
   "private": true,
   "description": "Saken — full project documentation",
-  "type": "module",
   "scripts": {
-    "dev": "vocs dev",
-    "build": "vocs build",
-    "preview": "vocs preview"
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "start": "next start -p 3002",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "overrides": {
+    "zod": "4.1.12"
   },
   "dependencies": {
-    "@vocs/twoslash-rust": "^0.1.0",
-    "mermaid": "^11.15.0",
-    "react": "^19",
-    "react-dom": "^19",
-    "vite": "^8.0.16",
-    "vocs": "^2.0.14",
-    "waku": "1.0.0-beta.1"
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.2",
+    "next": "16.2.9",
+    "nextra": "^4.6.1",
+    "nextra-theme-docs": "^4.6.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
   }
 }

@@ -1,0 +1,122 @@
+import { Callout, Steps } from 'nextra/components'
+
+# Local setup
+
+Get the Saken web app running against a Supabase project on your machine.
+
+<Steps>
+
+### Clone the repository
+
+```bash
+git clone https://github.com/Saken-Community-Management/saken.git
+cd saken
+```
+
+### Install dependencies
+
+```bash
+npm install
+```
+
+### Create a Supabase project
+
+In the [Supabase dashboard](https://supabase.com/dashboard), create a new project. From
+**Settings → API**, copy:
+
+- the **Project URL** (`https://<ref>.supabase.co`), and
+- the **publishable / anon key** (either the legacy `eyJ…` anon JWT or the newer
+  `sb_publishable_…` key).
+
+### Apply the database schema
+
+The schema lives in `supabase/migrations/` as 47 ordered SQL files (`0001`→`0047`). Apply
+them to your project, in order. Two ways:
+
+- **Quick:** paste each migration into the Supabase **SQL Editor** and run it, in
+  sequence.
+- **Tracked (preferred):** use the Supabase CLI from the repo. Note the CI uses a
+  from-scratch replay (`supabase start`) to prove the migrations apply cleanly — see
+  [CI/CD](/operations/ci-cd).
+
+<Callout type="info">
+**The live DB is ground truth**
+
+The migration files reconstruct the schema, but a handful of production objects were once
+created by hand in the Dashboard and drifted from the files (see
+[Migration history](/database/migrations)). For a fresh local project, applying
+`0001`→`0047` in order reproduces the intended schema.
+</Callout>
+
+### Configure environment variables
+
+Copy the example and fill in your Supabase values:
+
+```bash
+cp .env.local.example .env.local
+```
+
+```bash filename=".env.local"
+# Supabase project URL: https://<project-ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
+
+# Public-facing key (anon JWT eyJ... OR publishable sb_publishable_...).
+# Sent to the browser — never put the service_role key here.
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-or-publishable-key>
+
+# Server-only. BYPASSES RLS — used for the narrow set of service-role
+# operations (resident token reads, concierge pre-write reads, users-table
+# language/active-complex writes). Never expose to the client.
+SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+
+# Optional: reveal the phone/WhatsApp OTP sign-in option (default hidden).
+NEXT_PUBLIC_PHONE_AUTH_ENABLED=false
+```
+
+These four are the **only** variables the web app reads
+(`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_PHONE_AUTH_ENABLED`).
+
+### Run the dev server
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). You should see the landing page.
+
+</Steps>
+
+## Useful scripts
+
+From `saken/package.json`:
+
+```bash
+npm run dev        # next dev
+npm run build      # next build (also the typecheck gate the CI uses)
+npm run start      # next start (production server)
+npm run lint       # eslint
+npm run typecheck  # tsc --noEmit
+npm run test       # vitest run
+npm run test:watch # vitest (watch mode)
+```
+
+<Callout type="info">
+**Verifying a change**
+
+The lightweight way to verify a change is `npm run build` (it typechecks the whole app)
+and `npm run test`. You generally don't need to spin up the full Supabase + auth stack to
+confirm a code change compiles and the pure-logic tests pass.
+</Callout>
+
+## Enabling sign-in methods (optional)
+
+- **Google** — register an OAuth client in Google Cloud Console; add the redirect URI
+  `https://<ref>.supabase.co/auth/v1/callback`; paste the client ID/secret into Supabase
+  → Authentication → Providers → Google.
+- **Email magic-link** — enable it under Authentication → Providers → Email; disable
+  passwords (Saken has none).
+- **Phone / WhatsApp OTP** — configure a Twilio (or other SMS) provider under
+  Authentication → Providers → Phone, then set `NEXT_PUBLIC_PHONE_AUTH_ENABLED=true`.
+
+Next: [First admin account](/getting-started/first-admin).
