@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { isAllowedAdmin } from '@/lib/auth/admin-allowlist'
+import { isAuthorizedAdmin } from '@/lib/auth/authorize'
 
 /**
  * Global auth gate (Next 16 `proxy` — the renamed `middleware`). Every request
@@ -52,7 +52,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if (!isAllowedAdmin(user.email)) {
+  if (!(await isAuthorizedAdmin(supabase, user.email))) {
     const url = request.nextUrl.clone()
     url.pathname = '/denied'
     return NextResponse.redirect(url)
