@@ -20,16 +20,16 @@ formal-Arabic set on the `feat/arabic-msa` branch.)
 paired by key. **How the app picks a locale:** per-user, via a `saken-locale`
 cookie (no URL routing); `users.language` is the source of truth.
 
-**16 namespaces · 837 strings · 0 missing Arabic.**
+**17 namespaces · 866 strings · 0 missing Arabic.**
 
 | Namespace | Strings | Scope |
 | --- | --- | --- |
 | [`auth`](#auth-57-strings) | 57 | Sign-in, email/WhatsApp, welcome, no-community, community-removed. |
 | [`categories`](#categories-20-strings) | 20 | The 10 budget/expense categories — labels + helper descriptions. |
-| [`common`](#common-36-strings) | 36 | Shared chrome: nav, settings menu, role labels, exit/delete dialogs. |
+| [`common`](#common-37-strings) | 37 | Shared chrome: nav, settings menu, role labels, exit/delete dialogs. |
 | [`components`](#components-187-strings) | 187 | Shared display components (summary cards, tables, special-projects bars, management rows). |
 | [`concierge`](#concierge-45-strings) | 45 | Concierge surface (submission list, form, status banners). |
-| [`dashboard`](#dashboard-65-strings) | 65 | Admin dashboard + all detail pages (cash, budget, collections, expenses, apartments, residents, concierges, treasurers, concierge-submissions). |
+| [`dashboard`](#dashboard-65-strings) | 65 | Admin dashboard + all detail pages. |
 | [`expenseForm`](#expenseForm-30-strings) | 30 | The shared expense form (admin + concierge). |
 | [`expenses`](#expenses-36-strings) | 36 | Admin expenses pages (list, receipt, new, edit, pre-Saken). |
 | [`fiscalYear`](#fiscalYear-48-strings) | 48 | Fiscal-year page + rollover confirmation. |
@@ -40,6 +40,7 @@ cookie (no URL routing); `users.language` is the source of truth.
 | [`resident`](#resident-106-strings) | 106 | Resident + magic-link surfaces. |
 | [`setup`](#setup-95-strings) | 95 | The 6-step setup wizard. |
 | [`specialProjects`](#specialProjects-21-strings) | 21 | Special-projects pages (list, detail, record, history). |
+| [`team`](#team-28-strings) | 28 | Team & roles — admin assigns/revokes elevated roles (admin/treasurer/concierge). |
 
 ---
 
@@ -134,7 +135,7 @@ The 10 budget/expense categories — labels + helper descriptions.
 | `descriptions.contingency` | Unforeseen, non-recurring operational expenses and emergency repairs, etc. | نفقات تشغيلية غير متوقعة وغير متكررة وإصلاحات طارئة، إلخ. |
 | `descriptions.miscellaneous` | Other miscellaneous operational expenses. | نفقات تشغيلية متفرقة أخرى. |
 
-## `common` — 36 strings
+## `common` — 37 strings
 
 Shared chrome: nav, settings menu, role labels, exit/delete dialogs.
 
@@ -156,6 +157,7 @@ Shared chrome: nav, settings menu, role labels, exit/delete dialogs.
 | `residents` | Residents | السكان |
 | `concierges` | Concierges | البوّابون |
 | `treasurers` | Treasurers | أمناء الصندوق |
+| `team` | Team & roles | الفريق والصلاحيات |
 | `fiscalYear` | Fiscal year | السنة المالية |
 | `reports` | Reports | التقارير |
 | `reportsGenerating` | Generating… | جارٍ الإنشاء… |
@@ -425,7 +427,7 @@ Concierge surface (submission list, form, status banners).
 
 ## `dashboard` — 65 strings
 
-Admin dashboard + all detail pages (cash, budget, collections, expenses, apartments, residents, concierges, treasurers, concierge-submissions).
+Admin dashboard + all detail pages.
 
 | Key | English | Arabic |
 | --- | --- | --- |
@@ -991,4 +993,39 @@ Special-projects pages (list, detail, record, history).
 | `detail.colRemaining` | Remaining | المتبقّي |
 | `record.title` | Record contribution | تسجيل مساهمة |
 | `record.projectLabel` | Project: &#123;name&#125; | المشروع: &#123;name&#125; |
+
+## `team` — 28 strings
+
+Team & roles — admin assigns/revokes elevated roles (admin/treasurer/concierge).
+
+| Key | English | Arabic |
+| --- | --- | --- |
+| `title` | Team & roles | الفريق والصلاحيات |
+| `description` | Assign or remove elevated roles — admin, treasurer, concierge. One person can hold more than one. Residents are managed from Edit apartments. | عيّن أو أزل الصلاحيات المتقدّمة — مدير، أمين الصندوق، بوّاب. يمكن أن يحمل الشخص الواحد أكثر من صلاحية. تُدار صلاحية السكان من تعديل الشقق. |
+| `membersHeading` | Members | الأعضاء |
+| `noMembers` | No members yet. | لا يوجد أعضاء بعد. |
+| `emailPlaceholder` | name@example.com | name@example.com |
+| `assign` | Assign | تعيين |
+| `assigning` | Assigning… | جارٍ التعيين… |
+| `roleAssigned` | Role assigned. | تم تعيين الصلاحية. |
+| `removeRole` | Remove &#123;role&#125; | إزالة &#123;role&#125; |
+| `unknownMember` | Unknown | غير معروف |
+| `roleAdmin` | Admin | مدير |
+| `roleTreasurer` | Treasurer | أمين الصندوق |
+| `roleConcierge` | Concierge | بوّاب |
+| `roleResident` | Resident | ساكن |
+| `errorPrepareFailed` | Could not prepare the invited person. Please try again. | تعذّر تجهيز الشخص المدعو. حاول مرة أخرى. |
+| `errorInvalidComplex` | Invalid community. | مجمّع غير صالح. |
+| `errorInvalidRole` | Invalid role. | صلاحية غير صالحة. |
+| `errorInvalidPerson` | Invalid person. | شخص غير صالح. |
+| `errorInvalidEmail` | Enter a valid email address. | أدخل بريداً إلكترونياً صحيحاً. |
+| `errorAssignFailed` | Could not assign the role. Please try again. | تعذّر تعيين الصلاحية. حاول مرة أخرى. |
+| `errorRevokeFailed` | Could not revoke the role. Please try again. | تعذّرت إزالة الصلاحية. حاول مرة أخرى. |
+| `errorNotAuthenticated` | Please sign in again. | يرجى تسجيل الدخول مرة أخرى. |
+| `errorNotAuthorized` | Only an admin of this community can change roles. | يمكن لمدير هذا المجمّع وحده تغيير الصلاحيات. |
+| `errorCannotAssignRole` | That role can’t be assigned. | لا يمكن تعيين هذه الصلاحية. |
+| `errorTargetNotFound` | That person could not be found. | تعذّر العثور على هذا الشخص. |
+| `errorLastAdmin` | This is the community’s only admin — assign another admin before removing this one. | هذا هو المدير الوحيد للمجمّع — عيّن مديراً آخر قبل إزالته. |
+| `errorRoleNotAssigned` | That role wasn’t assigned to this person. | هذه الصلاحية غير معيّنة لهذا الشخص. |
+| `errorGeneric` | Something went wrong. Please try again. | حدث خطأ ما. حاول مرة أخرى. |
 
