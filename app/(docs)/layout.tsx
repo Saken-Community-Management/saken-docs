@@ -7,7 +7,7 @@ const navbar = (
       <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.svg" alt="Saken" width={24} height={24} />
-        <b>Saken</b>
+        <b>Saken Docs</b>
       </span>
     }
     projectLink="https://github.com/Saken-Community-Management"
@@ -37,6 +37,7 @@ export default async function DocsLayout({
       editLink="Suggest changes to this page"
       sidebar={{ defaultMenuCollapseLevel: 1 }}
       darkMode
+      nextThemes={{ defaultTheme: 'light', attribute: 'class' }}
     >
       {children}
     </Layout>

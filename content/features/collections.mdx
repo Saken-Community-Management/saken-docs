@@ -16,13 +16,27 @@ reading the code, treat the two words as synonyms.
 
 ## Recording a payment
 
-`createPayment` (`src/lib/payments/actions.ts`) is an **admin or treasurer** action:
+`createPayment` (`src/lib/payments/actions.ts`) is gated on the `record_collections`
+capability — admin **or** treasurer, resolved through the capability matrix rather than a
+hard-coded role list:
 
 ```ts
 createPayment(input: PaymentFormValues): Promise<PaymentFormSaveResult>
-// requireUser(supabase, ['admin', 'treasurer'])
+// if (isBackendEnabled()) return createPaymentViaApi(input)
+// requireCapability(supabase, 'record_collections')
 // → verifyApartmentInComplex(...) scope check
 ```
+
+<Callout type="info">
+**Two code paths, one behaviour**
+
+Every collections action has both the original **direct-Supabase** body and a
+**backend-API** body (`createPaymentViaApi`, `POST /v1/payments`), selected by
+`isBackendEnabled()` / `SAKEN_API_URL`. The two are kept behaviour-identical down to the
+result shape, and the API path **falls back to direct-Supabase on any failure** — including
+a hung backend, which aborts after 6 s. Details in
+[Backend architecture](/architecture/backend).
+</Callout>
 
 The flow (`/payments/new`): pick an apartment (search-as-you-type, showing its current
 balance), choose a **purpose** (annual dues, or any active special collection), enter the
@@ -68,21 +82,50 @@ across all fiscal years, anchored at `opening_cash_date`. It surfaces on the das
 tile and `/dashboard/cash`. See [The money model](/concepts/money-model) for the full set
 of formulas.
 
-## What's partial
+## Owes YTD vs. full-year remaining
 
-<Callout type="warning">
-**No monthly collection targets**
+Alongside the full-year `remaining`, each apartment carries a **time-prorated** pair:
 
-Saken tracks **annual** collection progress (Collected YTD, % of annual) but has **no
-monthly targets, no per-month rollup, and no calendar view** (Feature Audit item 8,
-*Partial*). Adding monthly targets is item 2 on the [recommended build order](/roadmap/build-order)
-— estimated 3–5 days, with no schema change if done as UI-side aggregation.
+```
+dueToDate  = dueThisYear × elapsedFraction
+owesToDate = dueToDate − paidYtd + carryover   // > 0 behind schedule, < 0 ahead
+```
+
+`elapsedFraction` counts **whole months elapsed with the current month counted as due**
+(buildings bill each month's dues from the 1st), clamped to `[1/12, 1]` so an archived or
+past-viewed year collapses to the full year. Contribution rows read *"Owes YTD $X"* /
+*"Ahead"* / *"On track"* / *"Paid up"*, with the full-year figure as a *"$X left"* secondary.
+
+## Monthly collection schedule
+
+<Callout type="info">
+**Monthly targets shipped** (issues #29 + #32)
+
+The old "annual-only" gap is closed. `/dashboard/collections/schedule` lets an admin give
+each month of the active fiscal year a **weight** (default `1`). A month's share of the
+annual total is `weight ÷ Σ weights`, so boosting one month for a one-time cost — a fuel
+delivery, an elevator repair — automatically shrinks every other month's share and **the
+annual total never changes**. The weights feed the owes-YTD proration above via
+`weightedElapsedFraction`.
 </Callout>
 
-<Callout type="warning">
-**No automatic reminders**
+Storage is deliberately **sparse**: `collection_month_weights` (migration `0054`) only
+carries rows for months that differ from the default, so saving a weight of exactly `1`
+DELETEs the row rather than writing a redundant one. Writes always target the **active**
+fiscal year — the client never sends a fiscal-year id, and a stray `?fy=` on the edit page
+redirects to the paramless URL.
 
-There is **no payment-reminder system** at all (Feature Audit item 3, *Missing*) — no
-scheduler, no due-date tracking, no opt-in. It needs a whole new subsystem (cron +
-delivery + per-resident opt-in). See the [roadmap](/roadmap/missing-features).
+## Payment reminders
+
+<Callout type="info">
+**Reminders shipped, on demand rather than on a schedule**
+
+An admin or treasurer can send a reminder batch from the collections surface. Every
+behind-schedule apartment's resident gets a personalised **email** (Resend) and an **Expo
+push**, using the same money math as every dashboard surface. A 20-hour per-complex cooldown
+prevents spamming.
+
+Still missing: **cron / scheduled sending** (someone has to tap the button) and
+**per-resident opt-in**. The cooldown is also in-memory and per-instance. See
+[Delivery](/api/delivery) and the [roadmap](/roadmap/missing-features).
 </Callout>

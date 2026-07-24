@@ -2,18 +2,28 @@ import { Callout } from 'nextra/components'
 
 # Invitations
 
-Invitations are how an admin brings residents, treasurers, and concierges into a
-community. The **pipeline is fully built**; only the automated *delivery* of the invite
-link is stubbed.
+Invitations are how an admin brings people into a community. The **pipeline is fully
+built**, and **email delivery is live**; only the WhatsApp channel is still a stub.
+
+<Callout type="info">
+**Elevated roles are now assigned, not invited**
+
+Since the permissions redesign, an admin **assigns** treasurer / concierge / admin roles
+directly at `/dashboard/team` (`assignRole` → the `assign_role` RPC), instead of minting a
+bearer invite. Invitations remain the path for **residents** into an apartment slot. The
+`accept_invitation` RPC still *accepts* treasurer/concierge tokens for back-compat, but no
+UI mints them. See [Treasurer tools](/features/treasurer) and
+[Roles & role stacking](/concepts/roles).
+</Callout>
 
 ## The pipeline
 
 ```mermaid
 flowchart LR
     A[Admin] -->|createInvitation| I[(invitations row<br/>token, role, status=pending)]
-    I -->|deliverInvitation| D{channel}
-    D -->|email| E["deliverByEmail — STUB"]
-    D -->|whatsapp| W["deliverByWhatsApp — STUB"]
+    I -->|deliver| D{channel}
+    D -->|email| E["Resend — LIVE<br/>delivery_status → sent"]
+    D -->|whatsapp| W["STUB — stays pending"]
     A -.copies link manually.-> Invitee
     Invitee -->|/invite/token| AC[acceptInvitation → accept_invitation RPC]
     AC --> R[role granted / apartment linked]
@@ -46,6 +56,17 @@ Rules enforced by the action and the schema:
 
 Related actions: `revokeInvitation`, `reinviteInvitation`, `acceptInvitation`.
 
+<Callout type="info">
+**Two code paths, one behaviour**
+
+All four actions have both the original **direct-Supabase** body and a **backend-API** body
+(`createInvitationViaApi` → `POST /v1/invitations`, and so on), selected by
+`isBackendEnabled()` / `SAKEN_API_URL`, with the API path falling back to direct-Supabase on
+failure. The one behavioural difference is *delivery*: only the backend holds the Resend key,
+so the direct path creates the row without sending. See
+[Backend architecture](/architecture/backend).
+</Callout>
+
 ## Accepting an invite
 
 The invitee opens `/invite/{token}`, which lands them in the acceptance flow. After they
@@ -60,12 +81,35 @@ authenticate (or via their identity), `acceptInvitation` calls the atomic
 Identity is resolved from **email OR phone** inside the RPC, so it works regardless of
 sign-in method.
 
-## Delivery — both channels are stubs
+<Callout type="info">
+**Acceptance is bound to the invited identity**
 
-<Callout type="error">
-**Automated delivery is not implemented**
+Migration `0048` closed a bearer-credential hole: a signed-in user could redeem *someone
+else's* pending token to self-grant a role. Acceptance now requires the accepter's
+`auth.email()` / phone to **match the invite**, and a mismatch returns the
+`identity_mismatch` outcome. Issue #41.
+</Callout>
 
-Both delivery channels currently return *"not yet implemented"*:
+## Delivery — email live, WhatsApp stubbed
+
+<Callout type="info">
+**Email invites are sent** (via the backend)
+
+`saken-api` renders a bilingual invite email and sends it through **Resend** from
+`hello@saken.com`, carrying the `${PUBLIC_WEB_URL}/invite/${token}` link and flipping
+`delivery_status` to `sent`. The web app's own `deliverByEmail` is still the Phase-A1 stub —
+it never gained mail credentials, by design — so both statements are true at once: the web
+module is a stub *and* invite email works, because the send happens in the backend.
+
+If `RESEND_API_KEY` is unset (dev), the send is a logged **no-op** and `delivery_status`
+stays `pending` — deliberately not `failed`.
+</Callout>
+
+<Callout type="warning">
+**WhatsApp delivery is still not implemented**
+
+A `whatsapp` invite (phone-only invitee) creates the row and logs *"WhatsApp delivery not
+yet implemented"* on **both** tiers, leaving `delivery_status = 'pending'`:
 
 ```ts filename="src/lib/invitations/delivery/whatsapp.ts"
 export async function deliverByWhatsApp(_invitation) {
@@ -73,12 +117,10 @@ export async function deliverByWhatsApp(_invitation) {
 }
 ```
 
-`deliverByEmail` is likewise a stub (its header notes a planned Resend integration in
-"Phase A5"). The invitation **row and token are still created**, and the
-**acceptance flow works** — so in practice the admin **copies the invite link and shares
-it manually** (e.g. pastes it into the building's WhatsApp group), which matches the
-design's intended hand-off. See [Email & WhatsApp delivery](/api/delivery) for the
-orchestrator design and what a real implementation would plug into.
+The **row, the token, and the acceptance flow all work** — the admin copies the invite link
+and pastes it into the building's WhatsApp group, which matches the design's intended
+hand-off. See [Delivery](/api/delivery) for the orchestrator and what a real implementation
+plugs into.
 </Callout>
 
 ## The `invitations` table

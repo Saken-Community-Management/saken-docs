@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { isAllowedAdmin } from '@/lib/auth/admin-allowlist'
+import { isAuthorizedAdmin } from '@/lib/auth/authorize'
 
 /**
  * OAuth callback. Exchanges the code for a session, then enforces the access
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!isAllowedAdmin(user?.email)) {
+  if (!(await isAuthorizedAdmin(supabase, user?.email))) {
     await supabase.auth.signOut()
     return NextResponse.redirect(`${origin}/denied`)
   }

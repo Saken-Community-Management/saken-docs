@@ -1,75 +1,260 @@
 import { Callout } from 'nextra/components'
 
-# saken-server endpoints
+# Backend endpoints
 
-`saken-server` is a NestJS API whose endpoints **mirror the web app's server actions**, so
-the web app can migrate to it incrementally and a React Native app can build against it
-directly.
+`saken-api` is the NestJS backend in `saken-backend`, live in production since the
+2026-07-24 cutover. It serves the web app, the React Native app, `saken-mcp` and
+`saken-cli`. This page enumerates **every route** exposed by the controllers under
+`src/**/*.controller.ts` — 68 in total: 67 under `/v1`, plus `GET /health` at the root.
 
-<Callout type="warning">
-**Built, not yet wired**
+The architecture behind them — the RLS-preserving request pipeline, the error envelope, the
+idempotency contract — is on [Backend & MCP](/architecture/backend).
 
-This backend **compiles and runs in isolation but is not connected to the web app yet** —
-it's the tier in waiting. Treat this page as the endpoint contract, not a description of
-production traffic. See [Backend & MCP](/architecture/backend).
+## Base URLs
+
+| Environment | Base | Swagger |
+| --- | --- | --- |
+| Production | `https://saken-api.onrender.com/v1` | disabled |
+| Dev | `https://saken-api-dev.onrender.com/v1` | `…/v1/docs` |
+| Local | `http://localhost:4000/v1` | `…/v1/docs` when `SWAGGER_ENABLED=true` |
+
+Clients are always pointed at the **versioned** base, not the host root. `GET /health` is
+the one route outside `/v1` — it is the infra probe and must not depend on an API version.
+
+## Conventions
+
+- **Auth** — `Authorization: Bearer <supabase access token>`. Web and React Native send the
+  same token. The signature is verified against the project JWKS; a per-request Supabase
+  client carrying that token preserves RLS end to end.
+- **Residents** — no login. The apartment magic link `/v1/r/:apartmentId/:token/*` is
+  validated by `ResidentTokenGuard`, which returns an **indistinguishable 404** on every
+  failure mode so token-probing learns nothing.
+- **Authorization** — the *Capability* column is the token checked against the **union** of
+  the caller's stackable roles in their **active community**. `JWT` means authentication
+  only; `RPC` means the `SECURITY DEFINER` function does the authorising.
+- **Validation** — a global `ValidationPipe` with `whitelist` + `forbidNonWhitelisted`:
+  unknown body properties are a 400, not silently dropped.
+- **Shape** — responses are camelCase; lists come wrapped under a named key
+  (`{ members: [...] }`). Money is decimal strings, never floats.
+- **Errors** — every failure is `{ error: { code, message, details?, correlationId? } }`.
+  Branch on `code`; `message` is a fallback only.
+- **Locale** — `?lang=en|ar` or `Accept-Language` localises the fallback message of common
+  error codes and the budget editor's category labels.
+- **Tracing** — send `x-correlation-id` and it is echoed back and stamped into error bodies;
+  otherwise the server mints one.
+
+## Capabilities
+
+Every capability resolves through `CAPABILITY_MATRIX` in `src/domain/capabilities.ts`.
+Roles are stackable, so holding *any* listed role grants the capability.
+
+| Capability | admin | treasurer | concierge | resident |
+| --- | :-: | :-: | :-: | :-: |
+| `view_dashboard` | ● | ● | | ● |
+| `record_collections` | ● | ● | | |
+| `record_expenses` | ● | ● | | |
+| `submit_expense` | | | ● | |
+| `review_submissions` | ● | ● | | |
+| `edit_community` | ● | | | |
+| `edit_budget` | ● | | | |
+| `manage_special_projects` | ● | | | |
+| `record_project_contribution` | ● | ● | | |
+| `fiscal_rollover` | ● | | | |
+| `manage_roles` | ● | | | |
+| `assign_residents` | ● | | | |
+| `delete_community` | ● | | | |
+
+`resident` is not a `roles` row — residency is an `apartments.current_user_id` match, which
+the gate resolves through apartment occupancy.
+
+## Idempotency
+
+Three money-writing routes are marked `@Idempotent()`:
+
+| Route |
+| --- |
+| `POST /v1/payments` |
+| `POST /v1/expenses` |
+| `POST /v1/special-projects/:id/contributions` |
+
+Send an `Idempotency-Key` header and the first successful response is replayed verbatim —
+same status, same body — on any retry within 24 hours. The key is reserved *before* the
+handler runs, so two concurrent duplicates never both execute; a handler that throws
+releases the key so it stays retryable; reusing a key for a different user or endpoint is a
+**409**. The header is optional — omit it and the route behaves normally. Full contract:
+[Idempotency](/architecture/backend#idempotency).
+
+## Health
+
+| Method · path | Auth | Description |
+| --- | --- | --- |
+| `GET /health` | none | `{ "status": "ok", "service": "saken-backend" }`. **Root, not under `/v1`.** |
+
+## Account & membership
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `GET /me` | JWT | Profile, cross-community `memberships`, `activeRoles` (the union in the active community) and the derived `capabilities` list — so clients gate UI without re-deriving the matrix. |
+| `PATCH /me/language` | JWT (self) | Set `language` to `en` or `ar`. Service-role write with a server-derived user id. |
+| `PUT /me/active-complex` | JWT (self) | Point `users.active_complex_id` at `complexId`. Membership is pre-checked server-side — you cannot point at a community you don't belong to. |
+| `POST /communities/:complexId/exit` | RPC | `exit_community`. Outcomes: `exited`; `admin_cannot_exit` (admins delete instead); `not_member`. |
+| `DELETE /communities/:complexId` | RPC | `delete_community` — atomic soft-delete for every member. `not_authorized` → 403; `already_deleted` → 400. |
+
+## Setup & structure
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `POST /complexes` | JWT | Create a community via `create_complex_with_admin` — **any authenticated user may**, and becomes its admin. Also stamps the active-complex pointer. |
+| `GET /complexes/:complexId/setup-state` | `edit_community` | Wizard milestones for that complex. The path id is enforced against the caller's resolved membership. |
+| `GET /complexes/:complexId/apartments` | `edit_community` | Buildings + apartments for the apartments editor. |
+| `POST /complexes/:complexId/buildings` | `edit_community` | Add a building (`name`, `kind`). |
+| `POST /buildings/:buildingId/apartments` | `edit_community` | Add an apartment (`label`, `share`, optional occupant). |
+| `PATCH /apartments/:id` | `edit_community` | Update an apartment's label, share or occupant. |
+| `POST /residents` | `assign_residents` | Create a placeholder resident user (no auth identity yet). |
+
+## Team & roles
+
+Admin-assign replaced elevated-role invitations. Every route is scoped to the **target**
+complex, so a multi-community admin can only manage the one they administer.
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `GET /communities/:complexId/members` | `manage_roles` | One row per member with their role union. Service-role read — the membership list must not be confined by RLS to the active community. |
+| `POST /roles/assign` | `manage_roles` | `assign_role` RPC. Target by `userId` **or** `email` (resolved to an existing user, a reused placeholder, or a fresh placeholder). Stackable — grants one role without disturbing the others. |
+| `POST /roles/revoke` | `manage_roles` | `revoke_role` RPC. Refuses to remove the last admin (`last_admin` → 409). |
+
+## Collections (payments)
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `GET /payments/form-data` | `record_collections` | Buildings + apartments for the collection form. |
+| `POST /payments` **`@Idempotent`** | `record_collections` | Record a collection (`purpose: annual_dues`). Fiscal year resolves from `receivedOn`; the DB trigger assigns the sequential receipt number. |
+| `PATCH /payments/:id` | `record_collections` | Edit. **Both ends are scoped** — the row *and* the apartment it is being re-pointed at must live in the caller's complex. Race-guarded on `deleted_at IS NULL`. |
+| `DELETE /payments/:id` | `record_collections` | Soft-delete (`deleted_at`), same scoping and race guard. |
+| `POST /payments/pre-saken` | `edit_community` | Bulk pre-Saken capture: per apartment, set the carryover and upsert the single pre-period row dated the opening-cash anchor minus one day. |
+
+## Expenses
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `POST /expenses` **`@Idempotent`** | `record_expenses` | Record an expense (posts `approved`). `lineId` accepts a budget-line UUID or the `AUTO_OTHER` sentinel, which server-side finds-or-creates that category's "Other" line. |
+| `PATCH /expenses/:id` | `record_expenses` | Edit, scoped `.eq('complex_id', …)` on top of RLS. |
+| `DELETE /expenses/:id` | `record_expenses` | Soft-delete. |
+| `POST /expenses/pre-saken` | `edit_community` | Bulk pre-Saken capture, one row per budget line. |
+| `POST /expenses/:id/receipt-photo` | `record_expenses` | Multipart upload, field `file`, 10 MB cap. Server-side downscale + EXIF strip, stored under the caller's complex folder so storage RLS fires. |
+
+## Budget
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `GET /budget/line-options` | `record_expenses` | Lines grouped by category for the expense form's Line dropdown: `{ categories: [{ categoryKey, lines }] }`. |
+| `GET /budget/editor-data` | `edit_budget` | Full editor state — categories, lines, totals. Bootstraps the budget and the 10 categories if absent. Category labels localise via `?lang=` → `Accept-Language` → `users.language` → `en`. |
+| `POST /budget/lines` | `edit_budget` | Add a line (`categoryKey`, `rate`, `quantity`, optional description). |
+| `PATCH /budget/lines/:id` | `edit_budget` | Update rate, quantity or description. |
+| `DELETE /budget/lines/:id` | `edit_budget` | Remove a line. |
+| `POST /budget/versions` | `edit_budget` | Write an append-only snapshot. The note is **generated server-side** from a per-line diff against the previous version; description-only or no-change saves are skipped (`written: false`). |
+| `GET /budget/history` | `view_dashboard` | `{ versions: [...] }`, newest first. Append-only — there is deliberately no restore route. |
+
+## Summary & ledgers
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `GET /summary` | `view_dashboard`, or `assign_residents` when `includeShareInfo=1` | The dashboard payload: budget, per-apartment dues/paid/carry/remaining/status, anchored cash, category actuals. `?fy=<uuid>` views an archived year (and pulls the frozen carry snapshot). `?includeShareInfo=1` exposes apartment `view_token`s — those are credentials, hence the stricter gate. |
+| `GET /apartments/:id/ledger` | `view_dashboard` | One apartment's collections ledger — the drill-in behind tapping an apartment. `?fy=` for a past year. 404 when the apartment is outside the caller's complex. |
+
+## Fiscal year
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `GET /fiscal-year` | `view_dashboard` | `{ fiscalYears: [...] }` — active plus archived. |
+| `POST /fiscal-year/rollover` | `fiscal_rollover` | `rollover_fiscal_year` RPC: closes the active year and opens the next atomically. Business outcomes are a **200 with `{ outcome }`** — `ok`, `pending_submissions`, `no_active_fy` — because they are normal flow, not errors. Only genuine auth/server failures throw. |
+
+## Concierge submissions
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `GET /concierge/submissions` | `submit_expense` | `{ submissions: [...] }` — the caller's own submissions. |
+| `GET /concierge/submissions/:id` | `submit_expense` | One own submission. |
+| `POST /concierge/submissions` | `submit_expense` | Submit an expense for approval (`status: pending`, `submitted_by` = self). Pre-write budget lookups use the service-role client — concierge has no RLS read on the budget tables — while the INSERT goes through the user client so the concierge RLS policy fires. |
+| `PATCH /concierge/submissions/:id` | `submit_expense` | Edit a still-pending own submission. |
+
+## Admin review
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `GET /admin/submissions` | `review_submissions` | `{ submissions: [...] }` — pending queue. |
+| `GET /admin/submissions/count` | `review_submissions` | Pending count for the dashboard badge. |
+| `GET /admin/submissions/:id` | `review_submissions` | One pending submission. |
+| `POST /admin/submissions/:id/approve` | `review_submissions` | Approve, optionally with edited fields. Records the **actor** as `approved_by`; `submitted_by` is never touched. |
+| `POST /admin/submissions/:id/reject` | `review_submissions` | Reject with a reason. |
+
+Both routes are available to treasurers as well as admins — `review_submissions` is granted
+to both.
+
+## Special projects
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `GET /special-projects` | `view_dashboard` | `{ projects: [...] }`. |
+| `GET /special-projects/:id` | `view_dashboard` | Detail: project, per-apartment shares, contributions. |
+| `POST /special-projects` | `manage_special_projects` | Create. |
+| `PATCH /special-projects/:id` | `manage_special_projects` | Update an active project. |
+| `PUT /special-projects/:id/shares` | `manage_special_projects` | Upsert one apartment's due. |
+| `POST /special-projects/:id/contributions` **`@Idempotent`** | `record_project_contribution` | Record a contribution — a `payments` row with `purpose: special_collection`. Treasurers can record against a project they cannot edit. |
+| `POST /special-projects/:id/close` | `manage_special_projects` | Close irreversibly. Race-guarded — a second attempt loses cleanly. |
+
+## Invitations
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `GET /invitations/validate?token=` | **public**, 20/min | Safe public context for the landing page: `role`, `language`, `inviteeName`. 404 on any failure — expired, revoked, unknown. |
+| `GET /invitations/context?token=` | **public**, 20/min | `complexId`, `apartmentId`, `role` for the landing page. |
+| `POST /invitations/accept` | JWT | `accept_invitation` RPC. Outcomes map to stable codes: `already_member` → 409, `already_accepted` → 409, `expired` → **410**, `identity_mismatch` → 403 (the invite was bound to a different email/phone — migration 0048), `not_authenticated` → 401. |
+| `POST /invitations` | `assign_residents` | Create an invitation for `resident`, `concierge` or `treasurer`. `apartmentId` is required for residents and must be absent otherwise. Email delivery is attempted via Resend; with no key configured the row is still created and `delivery_status` stays `pending`. |
+| `POST /invitations/:id/revoke` | `assign_residents` | Revoke a pending invitation. |
+| `POST /invitations/:id/reinvite` | `assign_residents` | Re-issue with fresh delivery. |
+
+## Reports & receipts
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `GET /reports/ytd` | `view_dashboard` | Year-to-date PDF, streamed with `Content-Disposition: attachment`. Renders the **active** fiscal year — per-`?fy=` PDFs are a documented deferral, matching the web app. |
+| `GET /payments/:id` | `view_dashboard` | JSON detail of one collection — the receipt's fields without the PDF. Backs the mobile receipt screen. Indistinguishable 404 outside the caller's complex. |
+| `GET /payments/:id/receipt` | `view_dashboard` | The same receipt as a PDF. |
+
+## Resident magic link
+
+Public, read-only, no JWT. `ResidentTokenGuard` validates `:apartmentId` + `:token` against
+`apartments.view_token`, resolves the complex scope, and returns a **404 on any failure**.
+All reads use the service-role client because residents are not Supabase auth users; the
+token-derived `complexId` is the containment boundary. Rate-limited to 30/min.
+
+| Method · path | Description |
+| --- | --- |
+| `GET /r/:apartmentId/:token/summary` | The read-only community summary. |
+| `GET /r/:apartmentId/:token/reports/ytd` | Resident YTD PDF — identical to the admin one. |
+| `GET /r/:apartmentId/:token/payments/:id/receipt` | Single-collection receipt PDF, 404 if the payment is outside the token's complex. |
+
+## Reminders
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `POST /reminders/payments` | `record_collections` | Email **and** push every behind-schedule apartment's resident. Returns `{ sent, skipped, details[], pushSent, pushFailed }`. Gated on the collections capability — the person who chases dues is the person who records them. A **20-hour per-complex cooldown** returns `429 reminders_cooldown` with `details.retryAfterMs`; it is only stamped when at least one notification actually went out. |
+
+## Devices
+
+| Method · path | Capability | Description |
+| --- | --- | --- |
+| `POST /devices` | JWT | Register or re-point this device's Expo push token; returns 200 `{ registered: true }`. UPSERT keyed on the token, so a handset that changes owners never keeps delivering to the previous one. |
+| `DELETE /devices` | JWT | Remove the token; 200 `{ removed: true }`. Filters on the caller's `user_id`, so you cannot evict someone else's device by guessing their token. |
+
+No capability gate: registering *your* device for *your* notifications isn't role-scoped, and
+the identity is resolved server-side rather than accepted from the client.
+
+<Callout type="info">
+**The OpenAPI spec is the machine-readable source**
+
+The controllers generate a Swagger document at `/v1/docs`, and it is what the typed React
+Native and MCP clients are generated from. It is **off in production** — regenerate against
+`saken-api-dev` or a local run with `SWAGGER_ENABLED=true`.
 </Callout>
-
-## Auth
-
-- **Web + React Native:** send the Supabase access token as `Authorization: Bearer
-  <token>`. `JwtAuthGuard` validates it (works for HS/RS/ES signing keys). A per-request
-  Supabase client carrying that JWT preserves RLS.
-- **Residents:** no login — the magic-link path `/r/:apartmentId/:token/*` is validated by
-  `ResidentTokenGuard` (indistinguishable 404 on any failure).
-- Health: `GET /health` → `{ "status": "ok" }`. Runs on port `4000`.
-
-## Endpoint map
-
-| Method & path | Web equivalent |
-| --- | --- |
-| `GET /me` · `PATCH /me/language` · `PUT /me/active-complex` | profile · `updateMyLanguage` · `setActiveComplex` |
-| `POST /communities/:id/exit` · `DELETE /communities/:id` | `exitCommunity` · `deleteCommunity` (RPCs) |
-| `POST /complexes` | `create_complex_with_admin` |
-| `POST /complexes/:id/buildings` · `POST /buildings/:id/apartments` · `PATCH /apartments/:id` · `POST /residents` | setup wizard hooks |
-| `POST/PATCH/DELETE /payments` · `POST /payments/pre-saken` · `GET /payments/form-data` | `src/lib/payments/*` |
-| `POST/PATCH/DELETE /expenses` · `POST /expenses/pre-saken` | `src/lib/expenses/*` |
-| `GET /budget/line-options` | `fetchBudgetLineOptions` |
-| `POST/PATCH /concierge/submissions` · `GET /concierge/submissions[/:id]` | `src/lib/concierge/*` |
-| `GET /admin/submissions[/count\|/:id]` · `POST /admin/submissions/:id/approve\|reject` | `src/lib/admin-submissions/*` |
-| `GET/POST/PATCH /special-projects[...]` · `PUT /:id/shares` · `POST /:id/contributions` · `POST /:id/close` | `src/lib/special-projects/*` |
-| `GET /invitations/validate\|context` · `POST /invitations[/:id/revoke\|/:id/reinvite\|/accept]` | `src/lib/invitations/*` |
-| `GET /fiscal-year` · `POST /fiscal-year/rollover` | `src/lib/fiscal/*` (RPC) |
-| `GET /summary` | `fetchSummaryData` |
-| `GET /reports/ytd` | admin YTD PDF |
-| `GET /r/:apartmentId/:token/summary\|reports/ytd` | resident magic-link routes |
-
-## Module layout
-
-```
-src/
-  config/   env validation (zod)
-  supabase/ per-request user (RLS) + service-role + anon client factory
-  auth/     JwtAuthGuard, ResidentTokenGuard, AuthContextService, TokensService
-  domain/   shared enums + the 10 category keys
-  common/   Postgrest → HTTP error mapping
-  summary/ budget/ fiscal/ payments/ expenses/ concierge/
-  admin-submissions/ special-projects/ invitations/ account/ setup/ reports/ resident/ health/
-```
-
-## Configuration
-
-| Var | Purpose |
-| --- | --- |
-| `SUPABASE_URL` | the same project the web app uses |
-| `SUPABASE_ANON_KEY` | per-request RLS client + token validation |
-| `SUPABASE_SERVICE_ROLE_KEY` | narrow service-role operations only |
-| `PORT` | HTTP port (default `4000`) |
-| `CORS_ORIGINS` | comma-separated allowlist, or `*` |
-| `PUBLIC_API_URL` | absolute-link base in responses |
-
-## Intentionally deferred
-
-Per the backend README: wiring to the frontend; **email/WhatsApp invite delivery**
-(stubbed in the web app too); per-`?fy=` PDF reports (the web app also always renders the
-active FY); budget version-history read endpoints; and a fast-path local JWT verifier to
-replace the per-request `auth.getUser` network call.

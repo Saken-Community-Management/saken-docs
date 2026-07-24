@@ -1,0 +1,233 @@
+import { Callout } from 'nextra/components'
+
+# Surfaces & operations
+
+The console is a shell (`(admin)` route group: sidebar nav, signed-in operator's email, sign
+out) wrapping ten routes. Seven appear in the sidebar; three are detail/sub-routes reached by
+drilling in.
+
+| Route | In nav | What it is |
+| --- | --- | --- |
+| `/` | ✅ Overview | Cross-community metrics: signups, setup funnel, active users, per-community health |
+| `/communities` | ✅ Communities | Every complex, **including soft-deleted** |
+| `/communities/[id]` | — | Community detail: basics, members & roles, apartments |
+| `/communities/[id]/finances` | — | Every collection, expense and special project in that community |
+| `/users` | ✅ Users | Every identity row — authenticated accounts *and* invite placeholders |
+| `/users/[id]` | — | User detail: memberships, apartments, superuser flag, dual-row reconcile |
+| `/invitations` | ✅ Invitations | All invitations across all communities, filterable by status |
+| `/superusers` | ✅ Superusers | Manage `public.platform_admins` |
+| `/audit` | ✅ Audit log | The append-only record of every write the console made |
+| `/security` | ✅ Security | Live hardening posture |
+
+Public (ungated) routes are only `/login`, `/denied`, and `/auth/*` (`callback`, `signout`).
+Everything else is blocked in middleware and re-checked in the layout.
+
+---
+
+## `/` — Overview
+
+Four headline stats, two charts, and a per-community health table. All of it is computed at
+request time from a handful of wide service-role reads and aggregated in JavaScript — fine at
+pilot scale, and explicitly flagged in the code as the thing to move into Postgres views if
+the dataset grows.
+
+| Panel | Definition |
+| --- | --- |
+| Communities | Active count, with deleted and total as the sub-line |
+| Authenticated users | `users` rows with a non-null `auth_provider`; placeholders counted separately |
+| Active (7d) | From Supabase Auth's `last_sign_in_at`, paged through the admin API (up to 10 pages × 200). Also shows 30d and total accounts |
+| Pending submissions | Concierge-logged expenses with `status = 'pending'`, summed across all communities |
+| New signups | Authenticated `users` created per month, last 6 months |
+| Setup funnel | Each community bucketed into Basics → Structure → Budget → Cash → Live, plus Deleted |
+
+The funnel stage is derived, not stored — first match wins: `deleted_at` → Deleted,
+`setup_completed_at` → Live, else `opening_cash_date` → Cash, else `budget_setup_done_at` →
+Budget, else *has buildings* → Structure, else Basics.
+
+The health table shows, per community: **cash** (opening cash + payments − posted expenses,
+both filtered to on/after the cash anchor date), **annual budget** (`SUM(rate × quantity)` over
+`budget_lines`, rolled up through categories → budget → the *active* fiscal year), **collected
+YTD** (payments in the active fiscal year), **collection %** (colour-coded at 80 / 40),
+**pending** submissions, and **last activity** (the most recent `received_on` or `spent_on`).
+Deleted communities sort last.
+
+<Callout type="info">
+If the Supabase Auth admin API is unavailable, the active-user counters fall back to zeros
+rather than crashing the dashboard. A row of zeros there means "couldn't read", not
+"nobody signed in".
+</Callout>
+
+## `/communities` — list
+
+A flat table of every complex including soft-deleted ones: name, creator email, member count,
+apartment count, setup state, active/deleted status, created date. Read-only; the name links
+into the detail page.
+
+## `/communities/[id]` — detail
+
+The main repair surface for a single community.
+
+| Section | Operations |
+| --- | --- |
+| Header | **Restore community** (only shown when soft-deleted) |
+| Basics | Edit name, fiscal-year start month (1–12), opening cash, cash anchor date |
+| Members & roles | Per role row: **Revoke**, **Reactivate**, **Remove**. Plus **Assign a role** by email |
+| Apartments | Per apartment: **Rotate link**, **Unassign** resident |
+
+**Restore community** precisely reverses the `delete_community` RPC. That RPC captures a
+single `now()` and stamps it on both `complexes.deleted_at` and the `roles.deactivated_at` of
+every membership it deactivates; the restore clears `deleted_at` and reactivates *exactly* the
+role rows whose `deactivated_at` equals that same timestamp — so memberships deactivated for
+unrelated reasons stay deactivated. It refuses if the community is not actually deleted.
+
+<Callout type="warning">
+Apartment occupancy (`apartments.current_user_id`) is **nulled by the delete and is not
+recoverable from the database**. The success message says so explicitly: residents must be
+re-linked by hand after a restore.
+</Callout>
+
+**Assign a role** takes an email or a user id and grants `admin`, `treasurer`, or `concierge`.
+Roles are stackable ([migration `0049`](/database/migrations)), so a user may hold several in
+the same complex — the action refuses only if the user already holds *that* role actively, and
+otherwise upserts on `(user_id, complex_id, role)`, which also reactivates a previously revoked
+row. Email resolution is **dual-row-safe**: it only matches rows with a non-null
+`auth_provider`, so an invite placeholder can never accidentally receive the grant.
+
+**Revoke** sets `deactivated_at`; **Remove** hard-deletes the role row (for reconciliation and
+cleanup) and is behind a danger-styled confirm.
+
+**Rotate link** replaces an apartment's `view_token` with a fresh UUID — the recovery path for
+a leaked resident magic link. Existing links die immediately. **Unassign** clears
+`current_user_id`.
+
+## `/communities/[id]/finances`
+
+Every collection, expense and special project in the community, each row expandable into an
+inline edit form.
+
+| Object | Operations |
+| --- | --- |
+| Collections (`payments`) | Edit amount / received-on / notes · **Soft-delete** · **Restore** |
+| Expenses | Edit amount / spent-on / vendor / notes · **Soft-delete** · **Restore** |
+| Special projects (`special_collections`) | **Close** · **Reopen** |
+
+Rows carry badges for their nature — `project` (a special-collection payment), `pre-Saken`
+(prior-period), `pending`/other expense status, and `deleted`. Soft-delete sets `deleted_at`,
+which removes the row from cash and dues arithmetic without destroying it; restore clears it.
+Closing a project sets `status = 'closed'` and stamps `closed_at`; reopening clears both.
+
+## `/users` — list
+
+Every row in `public.users` — authenticated accounts and invitation placeholders alike — with
+name, email, phone, type (the `auth_provider` badge, or `placeholder`), role count, apartment
+count, and created date.
+
+## `/users/[id]` — detail
+
+| Section | Operations |
+| --- | --- |
+| Identity | Read-only: email, phone, type, superuser flag, created, active community |
+| Dual-row banner | **Merge** placeholder into the authenticated row (only when a dual row is detected) |
+| Memberships | Per role, across *all* communities: **Revoke**, **Reactivate**, **Remove** |
+| Assign a role | Grant `admin` / `treasurer` / `concierge` in **any** community, including deleted ones |
+| Apartments | Read-only list of apartments this user occupies |
+
+### Dual-row reconcile
+
+Saken's identity model can end up with two `users` rows sharing one email: a **placeholder**
+created by an invitation (`auth_provider IS NULL`) and the **authenticated** row created when
+that person actually signs in. The detail page detects the pair and offers to fold one into
+the other. The merge:
+
+1. re-points apartment occupancy (`current_user_id`) from the placeholder to the authenticated
+   row,
+2. moves role rows one by one — **skipping** (and deleting) any role the authenticated user
+   already holds, because the stackable `UNIQUE (user_id, complex_id, role)` would collide,
+3. deletes the now-orphaned placeholder.
+
+It refuses to run unless the source really is a placeholder, the target really is
+authenticated, and the two emails match case-insensitively. The result message reports how many
+apartments moved, how many roles moved, and how many duplicate roles were dropped.
+
+<Callout type="warning">
+This is the console's only genuinely multi-write action and it runs **without a transaction**.
+If step 3 fails, the data has already been re-pointed — the action says so
+("Re-pointed data but could not delete placeholder…") and, crucially, a `[FAILED]` audit row
+is still written. See [the failure-auditing contract](/admin-console/security-and-audit).
+</Callout>
+
+## `/invitations`
+
+Every invitation across every community, filterable by `pending` / `accepted` / `revoked` /
+`expired` (plus All). Columns: invitee, community, role, apartment, status, expiry.
+
+| Operation | Availability | Effect |
+| --- | --- | --- |
+| **Revoke** | Pending and not expired | `status = 'revoked'`, stamps `revoked_at`. Refuses if already accepted |
+| **Re-open** | Expired or revoked | Back to `pending` with a fresh **14-day** expiry and `revoked_at` cleared. Refuses if already accepted |
+
+Re-open deliberately **keeps the existing token**, so the invite link the person was already
+sent starts working again — no need to re-send. Note that "expired" is computed at read time
+(`status = 'pending'` with `expires_at` in the past), not stored as a status value.
+
+## `/superusers`
+
+Manages `public.platform_admins` — who may sign into this console at all.
+
+| Operation | Guards |
+| --- | --- |
+| **Add** | Valid email format; refuses a duplicate email (case-insensitive) |
+| **Enable / Disable** | Disabling refuses on **self** and refuses if it would leave **zero** active superusers |
+| **Remove** | Refuses on **self**; refuses if removing the last active superuser |
+
+Adding a row grants console access to that identity regardless of sign-in method — Google or
+email + password both authorize through `is_platform_admin()`. Note that provisioning the
+*auth* account itself is still a manual Supabase Dashboard step; this page only manages the
+authorization row.
+
+## `/audit`
+
+The append-only log, newest first, capped at 200 rows per view. Filter by **action** (exact
+match, from a dropdown of the distinct action keys actually present) and by **actor** (email
+substring). Each row expands to show the actor, the `target_table/target_id`, and the
+`before` / `after` JSON snapshots side by side. Action badges are colour-toned by verb —
+green for restorative, amber for edits and soft-deletes, red for removals, violet for
+identity/token operations.
+
+### Every action key
+
+| Action | Target table | Written by |
+| --- | --- | --- |
+| `community.undelete` | `complexes` | Restore community |
+| `community.edit_field` | `complexes` | Edit basics |
+| `role.assign` | `roles` | Assign a role |
+| `role.revoke` | `roles` | Revoke |
+| `role.reactivate` | `roles` | Reactivate |
+| `role.remove` | `roles` | Remove (hard delete) |
+| `apartment.rotate_token` | `apartments` | Rotate link |
+| `apartment.unassign_resident` | `apartments` | Unassign |
+| `payment.edit` | `payments` | Edit a collection |
+| `payment.soft_delete` | `payments` | Soft-delete a collection |
+| `payment.restore` | `payments` | Restore a collection |
+| `expense.edit` | `expenses` | Edit an expense |
+| `expense.soft_delete` | `expenses` | Soft-delete an expense |
+| `expense.restore` | `expenses` | Restore an expense |
+| `special_project.close` | `special_collections` | Close |
+| `special_project.reopen` | `special_collections` | Reopen |
+| `invitation.revoke` | `invitations` | Revoke |
+| `invitation.reopen` | `invitations` | Re-open |
+| `user.reconcile` | `users` | Merge dual rows |
+| `superuser.add` | `platform_admins` | Add superuser |
+| `superuser.toggle` | `platform_admins` | Enable / Disable |
+| `superuser.remove` | `platform_admins` | Remove |
+
+That list is exhaustive: **21 action keys are the complete set of writes the console can
+perform**. If an operation is not in this table, the console cannot do it.
+
+## `/security`
+
+A live read of the hardening posture, all of it env-driven so it can be flipped in Vercel
+without a redeploy: write mode (`SAKEN_ADMIN_READONLY`), IP allowlist
+(`SAKEN_ADMIN_IP_ALLOWLIST`, with the actual IPs listed), the two authorization sources
+(count of active DB superusers, count of env-allowlist emails), and the timestamp of the most
+recent audit row. Details on [Security & audit](/admin-console/security-and-audit).

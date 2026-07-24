@@ -4,8 +4,8 @@ import 'nextra-theme-docs/style.css'
 
 export const metadata: Metadata = {
   title: {
-    default: 'Saken',
-    template: '%s — Saken docs',
+    default: 'Saken Docs',
+    template: '%s — Saken Docs',
   },
   description: 'Residential complex management — full documentation',
 }
@@ -17,7 +17,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>
-      <Head faviconGlyph="🏢" />
+      <Head />
       <body>{children}</body>
     </html>
   )
