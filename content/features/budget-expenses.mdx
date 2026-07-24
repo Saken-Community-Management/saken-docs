@@ -75,12 +75,29 @@ recommends surfacing a non-blocking "history entry failed" indicator.
 
 ## Logging expenses
 
-`createExpense` (`src/lib/expenses/actions.ts`) is an **admin or treasurer** action:
+`createExpense` (`src/lib/expenses/actions.ts`) is gated on the `record_expenses`
+capability — admin or treasurer, resolved from the union of the caller's stacked roles:
 
 ```ts
 createExpense(input: ExpenseFormValues): Promise<ExpenseFormSaveResult>
-// requireUser(supabase, ['admin', 'treasurer'])
+// if (isBackendEnabled()) return createExpenseViaApi(input)
+// requireCapability(supabase, 'record_expenses')
 ```
+
+<Callout type="info">
+**Two code paths, one behaviour**
+
+Expense and budget writes each have both a **direct-Supabase** body and a **backend-API**
+body (`POST/PATCH/DELETE /v1/expenses`, `/v1/budget/lines`, …), selected by
+`isBackendEnabled()` / `SAKEN_API_URL` and kept behaviour-identical down to the result
+shape; the API path falls back to direct-Supabase on any failure. The budget-editor and
+budget-history **reads** carry the same guard. Details in
+[Backend architecture](/architecture/backend).
+
+One deliberate divergence found by the 2026-07-23 audit and fixed there: the backend's
+`expenses` update/remove lacked the explicit `.eq('complex_id', …)` filter its siblings had
+(#90). It now has it.
+</Callout>
 
 An expense carries a vendor, a `category_key`, an amount, an **invoice period** (the
 month the cost applies to), an optional `spent_on` date, an optional receipt photo, and a

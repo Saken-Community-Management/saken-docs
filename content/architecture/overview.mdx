@@ -1,78 +1,178 @@
+import { Callout } from 'nextra/components'
+
 # Architecture overview
 
-Saken is a **Supabase-centred** system. The web app today *is* the backend (business logic
-in Next.js server actions, authorization in Postgres RLS). Two companion services —
-`saken-server` and `saken-mcp` — extend that core without duplicating it.
+Saken is a **Supabase-centred** system with a **shared API tier in front of it**. One
+Postgres database holds every community; four deployed surfaces read and write it — the
+Next.js web app, the NestJS backend, the React Native app, and the superuser console — plus
+two tooling clients. Authorization still lives in Postgres RLS, and every surface but one
+inherits it.
+
+<Callout type="info">
+**Naming**
+
+The backend's repo and its Render services are called **`saken-api`**. Earlier docs (and a
+few comments still in the code) call it `saken-server` — same service, older name.
+</Callout>
 
 ## The whole picture
 
 ```mermaid
 flowchart TD
-    subgraph Clients
-      Web["saken (Next.js 16 web app)<br/>Vercel · Frankfurt"]
-      RN["saken-mobile (React Native)<br/><i>planned</i>"]
-      LLM["LLM client<br/>(Claude Desktop / Code)"]
+    subgraph Product["Product surfaces"]
+      Web["saken — Next.js 16 web app<br/>saken.com · Vercel fra1"]
+      RN["saken-mobile — React Native (Expo)<br/>built · on EAS · not yet in a store"]
+      Admin["saken-admin — superuser console<br/>admin.saken.com · Vercel"]
     end
+
+    subgraph Tooling["Tooling clients"]
+      MCP["saken-mcp<br/>(MCP / stdio)"]
+      CLI["saken-cli<br/>(terminal)"]
+    end
+
+    API["saken-api — NestJS<br/>Render · Frankfurt · dev + prod"]
 
     subgraph Supabase["Supabase (eu-central-1)"]
-      PG[(Postgres<br/>+ 52 RLS policies<br/>+ SECURITY DEFINER RPCs)]
-      Auth["Supabase Auth<br/>Google · email · phone OTP"]
+      PG[(Postgres<br/>RLS policies<br/>+ SECURITY DEFINER RPCs)]
+      Auth["Supabase Auth<br/>Google · email+password<br/>· magic link · phone OTP"]
       Storage["Storage<br/>expense-receipts bucket"]
-      Edge["Edge fn: send-otp"]
     end
 
-    Server["saken-server (NestJS)<br/><i>built, not yet wired</i>"]
-    MCP["saken-mcp<br/>(MCP / stdio)"]
+    Web -->|"Bearer JWT · when SAKEN_API_URL is set"| API
+    Web -.->|"fallback: cookie client (RLS)"| PG
+    Web -.->|service-role (narrow)| PG
+    RN -->|Bearer JWT| API
+    RN -.->|auth only| Auth
+    MCP -->|Bearer JWT| API
+    CLI -->|Bearer JWT| API
 
-    Web -->|"@supabase/ssr cookie client (RLS)"| PG
-    Web -->|service-role (narrow)| PG
-    Web --> Auth
-    Web --> Storage
-    Auth -.hook.-> Edge
-    Web -.email.-> Resend["Resend (planned)"]
-    Auth -.SMS.-> Twilio["Twilio / SMS"]
+    API -->|"per-request user client (RLS)"| PG
+    API -->|service-role (narrow)| PG
+    API --> Auth
+    API --> Storage
+    API -.email.-> Resend["Resend<br/>invites · reminders"]
 
-    RN -->|Bearer JWT| Server
-    LLM -->|MCP| MCP -->|Bearer JWT| Server
-    Server -->|per-request user client (RLS)| PG
-    Server --> Auth
+    Admin ==>|"service-role — bypasses RLS<br/>and the backend"| PG
+    Admin -.->|auth only| Auth
 ```
 
-## The three repositories
+## The repositories
 
 | Repo | Tech | Role |
 | --- | --- | --- |
-| **`saken`** | Next.js 16, React 19, TS, Tailwind 4 | The product today — UI **and** business logic (server actions) |
-| **`saken-server`** | NestJS | A standalone API that mirrors the server actions; **built but not wired to the frontend yet** |
-| **`saken-mcp`** | TypeScript MCP SDK | Exposes Saken to LLM clients; a thin client of `saken-server` |
+| **`saken`** | Next.js 16, React 19, TS, Tailwind 4, next-intl | The product web app. Calls `saken-api` when configured; keeps its original direct-Supabase path as the fallback |
+| **`saken-api`** | NestJS 11 | The shared API tier. **Live on Render (Frankfurt)** as `saken-api-prod` / `saken-api-dev` |
+| **`saken-admin`** | Next.js 16 | The superuser console at `admin.saken.com`. Talks **straight to Supabase with the service-role key** — it bypasses both RLS and the backend |
+| **`saken-mobile`** | Expo SDK 57 / RN 0.86, expo-router | Native client. All data over `saken-api`; Supabase is used **only** for auth |
+| **`saken-mcp`** | TypeScript MCP SDK | Exposes Saken to LLM clients. A client of `saken-api`, never of the DB |
+| **`saken-cli`** | TypeScript | Terminal client over the same API, PDFs included |
+
+## The strangler wiring
+
+This is the single most load-bearing idea in the current architecture, and the reason the
+cutover was safe to do in one day.
+
+The web app was the backend: business logic in server actions, authorization in RLS.
+Rather than rewrite it against the API, it was **stranglered** — each vertical grew an
+adapter in `src/lib/api/*` (15 modules today), and the existing server action calls the
+adapter *first*, falling through to its original code when the adapter declines.
+
+```ts
+// src/lib/setup/fetch-summary-data.ts
+if (isBackendEnabled()) {
+  const viaApi = await fetchSummaryDataViaApi(options)
+  if (viaApi) return viaApi
+}
+// …the original direct-Supabase path continues unchanged below
+```
+
+`isBackendEnabled()` is simply `SAKEN_API_URL` being non-empty (`src/lib/api/client.ts`),
+so the whole tier is one environment variable away from being switched off per
+environment.
+
+### The read contract: `null` means "fall back"
+
+Read adapters return `null` on **any** failure — an error envelope, a network error, a
+timeout, an empty body, a 200 whose shape the mapper doesn't recognise, or a mapping that
+throws. The caller then runs the direct-Supabase path. A *legitimately* empty result
+(`[]`, `{}`) is returned as-is; only failure triggers the fallback.
+
+| Failure | What the adapter returns | What the user sees |
+| --- | --- | --- |
+| Backend returns `4xx`/`5xx` | `null` | Nothing — the direct path serves the page |
+| Backend unreachable / DNS / TLS | `null` (`network_error`) | Nothing |
+| Backend accepts the socket then **hangs** | `null` after **6 s** (`AbortSignal.timeout`) | Nothing — a 6 s wait, not a Vercel 504 |
+| Backend returns `200` with an empty or malformed body | `null` | Nothing |
+| Backend returns `200` with a legitimately empty list | `[]` | An empty list, correctly |
+
+`backendFetch` **never throws** — HTTP and network errors both come back as
+`{ error: { code, message } }`, so callers branch on `'error' in res` instead of
+try/catching. Writes are the deliberate exception: a failed write surfaces the backend's
+error to the form rather than silently double-writing through the direct path.
+
+<Callout type="warning">
+**This contract is not free — it has been broken twice and both times it mattered**
+
+The [2026-07-23 audit](/introduction/status) found the two High-severity issues in exactly
+this seam: `fetchSummaryDataViaApi` dereferenced the response unguarded, so a partial
+backend `200` **500'd `/dashboard`** instead of falling back; and `backendFetch` had no
+timeout, so a stalled backend hung the Server Component to a Vercel 504 rather than
+returning `null`. Both are fixed. When you add an adapter, the null-guard and the timeout
+*are* the feature.
+</Callout>
 
 ## Load-bearing decisions
 
-1. **Postgres RLS is the authorization spine.** ~52 RLS policies plus `SECURITY DEFINER`
-   helper functions/RPCs decide who can read and write what, keyed off `auth.email()` /
-   `auth.jwt()->>'phone'`. Both the web app's cookie client and the backend's per-request
-   client carry the user's JWT so RLS fires identically. See
+1. **Postgres RLS is the authorization spine — in every path.** Policies plus
+   `SECURITY DEFINER` helper functions decide who can read and write what, keyed off
+   `auth.email()` / `auth.jwt()->>'phone'`. The web app's cookie client, the backend's
+   **per-request client** (`SupabaseService.createUserClient`, built from the anon key plus
+   the caller's Bearer token), and therefore the mobile app and the tooling clients all
+   carry the same JWT, so the same policies fire identically. See
    [Auth & RLS wiring](/architecture/auth-rls).
 
-2. **Service-role is used sparingly.** The RLS-bypassing service-role key is reached for
-   only where it's unavoidable: resident magic-link reads (residents aren't auth users),
-   concierge pre-write validation reads, and `users`-table writes (language,
-   active_complex). Never trusted with client-supplied authorization.
+2. **The admin console is the deliberate exception.** `saken-admin` holds the service-role
+   key and bypasses RLS by design — a platform superuser is *not* a community admin, so
+   the per-community policies would be the wrong answer. That is precisely why it is a
+   **separate app** with its own authorization tier (`platform_admins` +
+   `is_platform_admin()`, plus an env allowlist and an IP allowlist), a global read-only
+   kill-switch, and an append-only `admin_audit_log` written at a single mutation choke
+   point. Blast-radius isolation, not convenience. See
+   [Admin console](/admin-console/overview).
 
-3. **Atomic multi-write flows are Postgres RPCs.** `accept_invitation`,
-   `rollover_fiscal_year`, `create_complex_with_admin`, `exit_community`,
-   `delete_community` are `SECURITY DEFINER` transactions, reused verbatim by every client.
+3. **Service-role is used sparingly everywhere else.** In the web app and the backend
+   alike it is reached for only where it's unavoidable: resident magic-link reads
+   (residents aren't auth users), concierge pre-write validation reads, token validation,
+   and `users`-table writes with a server-derived id. Never trusted with client-supplied
+   authorization.
 
-4. **The complex is the tenant boundary.** Every query scopes to a single complex,
-   resolved server-side from the caller's active membership. See
+4. **Atomic multi-write flows are Postgres RPCs.** `accept_invitation`,
+   `rollover_fiscal_year`, `create_complex_with_admin`, `assign_role` / `revoke_role`,
+   `exit_community`, `delete_community` are `SECURITY DEFINER` transactions, reused
+   verbatim by every client — the backend calls the same functions the web app does rather
+   than re-implementing them.
+
+5. **The complex is the tenant boundary.** Every query scopes to a single complex, resolved
+   server-side from the caller's active membership — in the resolvers, in the RLS helpers,
+   and in the backend's `AuthContextService`. See
    [Multi-tenant isolation](/architecture/multi-tenant).
+
+6. **Degrading beats failing.** The strangler contract above means a backend outage costs
+   the web app latency and the API-only features, not availability.
 
 ## Hosting & data residency
 
-- The web app deploys to **Vercel**, with functions pinned to **`fra1` (Frankfurt)** to
-  co-locate with the Supabase project in **`eu-central-1`** (commit `84a98b1`).
-- Supabase provides Postgres, Auth, Storage (the `expense-receipts` bucket), and the
-  `send-otp` edge function.
+| Surface | Where | Notes |
+| --- | --- | --- |
+| `saken` (web) | **Vercel**, functions pinned to **`fra1`** | `main` → saken.com (prod Supabase), `develop` → dev.saken.com (dev Supabase) |
+| `saken-api` | **Render**, **Frankfurt**, Docker, Starter (always-on) | Two services from one `render.yaml` blueprint: `saken-api-prod` (`main`) and `saken-api-dev` (`dev`); `/health` is the health check |
+| `saken-admin` | **Vercel** (its own project) | `admin.saken.com` |
+| `saken-mobile` | **EAS** (Expo) | `production` / `preview` / `development` profiles, each pointing at its own API + Supabase |
+| Supabase | **`eu-central-1`** | Postgres, Auth, Storage (`expense-receipts`), the `send-otp` edge function |
+
+Everything is co-located in Frankfurt on purpose: the backend adds a hop, and a hop across
+regions on every per-request auth round-trip would have been the whole latency budget.
 
 Dive deeper: [Frontend](/architecture/frontend) · [Backend & MCP](/architecture/backend)
-· [Auth & RLS](/architecture/auth-rls) · [Multi-tenant isolation](/architecture/multi-tenant).
+· [Auth & RLS](/architecture/auth-rls) · [Multi-tenant isolation](/architecture/multi-tenant)
+· [Mobile app](/mobile/overview) · [Admin console](/admin-console/overview).

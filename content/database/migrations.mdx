@@ -2,18 +2,42 @@ import { Callout } from 'nextra/components'
 
 # Migration history
 
-The schema is built by **47 ordered SQL migrations** (`0001` → `0047`) in
-`saken/supabase/migrations/`. The files are the source of truth for the schema's *shape*;
-the **live database is the source of truth for reality** — a distinction Saken learned the
-hard way (see the bottom of this page).
+The schema is built by **56 ordered SQL migrations** (`0001` → `0056`). The files are the
+source of truth for the schema's *shape*; the **live database is the source of truth for
+reality** — a distinction Saken learned the hard way (see the bottom of this page).
+
+Since `0052` the history is no longer produced by one repo. Three repos now write to the
+**same shared Supabase project**, and each new migration is numbered to continue the shared
+sequence regardless of which repo authored it.
+
+## Where the migrations live
+
+| Range | Authored in | Notes |
+| --- | --- | --- |
+| `0001`–`0051` | **`saken`** (web) | The original, canonical history |
+| `0052` | **`saken-admin`** | `admin_audit_log` + the console's `service_role` write grants |
+| `0053`–`0056` | **`saken-backend`** | Idempotency store, collection weights, push tokens, the `0056` grant |
+| `0001`–`0056` | **`saken`** (web) | Mirrors *everything* — the one place with a complete history |
+
+Browse the complete set at
+[`saken/supabase/migrations/`](https://github.com/Saken-Community-Management/saken/tree/main/supabase/migrations).
+Every file follows the same house style: `BEGIN; … COMMIT;` wrapping the change, plus a
+self-verifying `DO $$ … RAISE EXCEPTION … $$` block that aborts if the post-state is wrong.
 
 <Callout type="info">
-**Browse the files**
+**The cross-repo numbering convention**
 
-The full migration set lives in the repo:
-[`saken/supabase/migrations/`](https://github.com/Saken-Community-Management/saken/tree/main/supabase/migrations).
-Each file follows a house style: `BEGIN; … COMMIT;` wrapping the change, plus a
-self-verifying block that `RAISE EXCEPTION`s if the post-state is wrong.
+There is exactly one shared dev database and one shared prod database. A repo that needs a
+schema change reads the highest number already applied and takes the next one — it does
+**not** restart at `0001` in its own namespace. Every such file carries a header stating
+which repo owns it and which repos it continues from (`0053`'s header says *"this repo
+continues the shared DB's 0001→0052 history (0052_admin_audit_log lives in the saken-admin
+repo)"*).
+
+The web repo then **mirrors** `0052`–`0056` byte-for-byte into
+`saken/supabase/migrations/`, so a single directory can still replay the whole schema.
+Verified 2026-07-24: the mirrored copies of `0052`–`0056` are byte-identical to their
+originating repos'.
 </Callout>
 
 ## The arc, by theme
@@ -29,6 +53,8 @@ self-verifying block that `RAISE EXCEPTION`s if the post-state is wrong.
 | `0032`–`0042` | Multi-community: `active_complex_id`, active-aware helpers, `create_complex_with_admin`, dual-row-safe lookups, soft-delete (`deleted_at`), `exit_community` / `delete_community` RPCs, service-role grants |
 | `0043` | **Phone identity** — email-OR-phone branch in all 5 RLS helpers + 5 RPCs |
 | `0044`–`0047` | **Hardening** — `uniq_authenticated_phone`, forbid empty identity strings, deterministic identity resolvers, **drop the `roles_readable` leak** |
+| `0048`–`0051` | **Permissions redesign + platform tier** — bind invitations to the invitee, stackable roles, `assign_role`/`revoke_role`, `platform_admins` |
+| `0052`–`0056` | **The cross-repo era** — admin console audit log, backend idempotency store, collection weights, push tokens, the `0056` grant |
 
 ## The hardening tail (0044–0047)
 
@@ -42,9 +68,124 @@ live-DB reconciliation:
 | `0046_deterministic_identity_resolvers` | Makes identity lookups order-independent (no `LIMIT 1` ambiguity) |
 | `0047_drop_roles_readable_view` | Removes the critical PII-leaking view (see below) |
 
-## "Repair the database, the docs lag" — the lessons
+## Permissions redesign + platform tier (0048–0051)
 
-Two stories shape Saken's migration discipline:
+| Migration | What it does |
+| --- | --- |
+| `0048_accept_invitation_bind_to_invitee_identity` | **Security hotfix.** `accept_invitation` checked only that a token was pending + unexpired, then attached the role to *whoever* accepted — a leaked treasurer link was a bearer credential for the role. Now the accepter's verified email/phone must match `invitee_email`/`invitee_phone`; new outcome `identity_mismatch`. |
+| `0049_stackable_roles` | Drops `roles_user_complex_unique (user_id, complex_id)` for `roles_user_complex_role_unique (user_id, complex_id, role)`, adds `assigned_by` / `assigned_at`. A person can now hold *several* roles in one community. Load-bearing side-effect: `accept_invitation`'s two upserts are reworked to `ON CONFLICT (user_id, complex_id, role)` **in the same transaction**, because the old conflict target ceases to exist the moment the constraint is dropped. |
+| `0050_assign_revoke_role_rpcs` | `assign_role` / `revoke_role` — admins grant elevated roles directly, no invite token. `revoke_role` refuses to remove a complex's **last active admin**. |
+| `0051_platform_admins` | The superuser tier for `saken-admin` and `saken-docs`: a `platform_admins` table (RLS on, **zero policies**) plus `is_platform_admin()`, so the internal tools authorize by *identity* rather than by sign-in method or an env allowlist. |
+
+## The cross-repo era (0052–0056)
+
+| Migration | Repo | What it does |
+| --- | --- | --- |
+| `0052_admin_audit_log` | `saken-admin` | Adds `admin_audit_log` (`actor_email`, `action`, `target_table`, `target_id`, `summary`, `before`/`after` `jsonb`, `created_at`) — RLS on, zero policies, and only `SELECT, INSERT` granted, so it is append-only *by grant*. Also loops over **17 editable tables** granting `service_role` `INSERT, UPDATE, DELETE`; the console is cross-tenant god-mode and cannot use the per-community `SECURITY DEFINER` RPCs, which authorize the caller as a community admin. |
+| `0053_idempotency_keys` | `saken-backend` | A durable idempotency store for the backend's money-writes (`POST /payments`, `/expenses`, `/special-projects/:id/contributions`). The interceptor's store had been **in-memory**, i.e. broken the moment the API runs more than one instance. `key text PRIMARY KEY` is the race arbiter; `user_id` and `endpoint` make a mismatched replay a 409; rows expire after 24 h. RLS on, zero policies, `service_role` granted `SELECT/INSERT/DELETE`. |
+| `0054_collection_month_weights` | `saken-backend` | Non-uniform monthly collection (issue #32). `PRIMARY KEY (fiscal_year_id, month)` + `weight numeric(6,2) DEFAULT 1 CHECK (weight >= 0)`. A month's share of the annual total is `weight / Σ weights`, so boosting July to `2.0` makes July owe 2/13 and every other month 1/13 — **the annual total never changes**. The table is *sparse*: absent rows mean weight 1, and the app deletes a row when its weight returns to exactly 1, so a complex that never touches the schedule has zero rows. The only one of the five new tables with real RLS policies (see [RLS policies](/database/rls)). |
+| `0055_device_push_tokens` | `saken-backend` | Expo push registry for the React Native app: `user_id` → `public.users(id)` (CASCADE), `expo_push_token` **UNIQUE** (the upsert arbiter — a device that changes owners re-points its row instead of duplicating), `platform` (`ios`/`android`), `created_at`, `last_seen_at`. RLS on, zero policies. |
+| `0056_idempotency_keys_update_grant` | `saken-backend` | One statement: `GRANT UPDATE ON public.idempotency_keys TO service_role`. See below — it is the most instructive migration in the set. |
+
+## The `0056` story — the fifth time the same trap sprang
+
+<Callout type="error">
+**"`service_role` write grants are not in the migration history"**
+
+`0053` shipped with an explicit design statement in its header:
+
+> *UPDATE is deliberately NOT granted — rows are write-once + delete-on-expiry.*
+
+That was true of the interceptor **as written at the time**: it executed the handler first
+and stored the response afterwards. But that ordering was itself a race — two concurrent
+requests carrying the same `Idempotency-Key` both missed the cache, both executed the
+mutation, and the primary-key conflict afterwards only decided whose response got
+remembered. A double-tapped "Record collection" could insert two payments.
+
+The fix was to **reserve the key before executing**: `INSERT` a PENDING placeholder
+(`status = 0`, `ON CONFLICT DO NOTHING`, arbitrated by the PK); winning that insert is the
+exclusive right to run the handler, and the loser waits and replays. On completion the
+winner **`UPDATE`s** the placeholder with the real status and response.
+
+Rows are now written **twice by design** — and `0053`'s sentence became stale. Without the
+`UPDATE` grant the finalize step fails `42501`, the interceptor silently degrades to
+per-instance memory, and durable cross-instance replay *never works* while looking fine in
+a single-instance dev environment.
+
+This was the **fifth** instance of the same trap — after `0029`, `0032`, `0035` and
+`0042` — and the **first one caught by reading the migration before it could fail in
+production**, rather than by debugging a `42501` afterwards. The rule that came out of it:
+**every migration that introduces a table the service-role client will write must grant
+those writes in the same file, and assert them in its verify block.** Note that `0056`
+needs no schema change at all: `status int NOT NULL` has no `CHECK` (so the `0` sentinel is
+legal) and `response jsonb` is already nullable, so the PENDING placeholder fits the `0053`
+table as-is.
+</Callout>
+
+## How migrations are actually applied
+
+<Callout type="warning">
+**Not `supabase db push`**
+
+The Supabase CLI's migration-tracking table is **out of sync** with reality and has been
+since `0001` — the early migrations were applied by hand, so the CLI believes almost
+nothing has been applied. Running `db push` against the shared project would be a very bad
+day. Migrations are applied **by hand**, one of two ways:
+
+1. **Supabase Dashboard → SQL Editor** (the usual path for prod), or
+2. the **Management API**:
+   `POST https://api.supabase.com/v1/projects/{ref}/database/query` with an `sbp_`
+   personal-access token in the `Authorization` header.
+</Callout>
+
+The discipline around each apply:
+
+```mermaid
+flowchart LR
+    A[take a backup] --> B["paste the file<br/>with COMMIT replaced by ROLLBACK"]
+    B --> C{"verify block<br/>RAISEs?"}
+    C -->|yes| D[fix the file, repeat]
+    C -->|no — NOTICE 'verify PASSED'| E[re-run with COMMIT]
+    E --> F["re-verify via pg_catalog /<br/>has_table_privilege"]
+```
+
+1. **Take a backup** before anything that touches data.
+2. **ROLLBACK-first inspect** — run the whole migration inside a transaction that ends in
+   `ROLLBACK` instead of `COMMIT`. The self-verifying `DO $$ … RAISE EXCEPTION … $$` block
+   every migration carries runs against the *post-state* inside that transaction, so a
+   failed assertion aborts harmlessly and a `RAISE NOTICE '… verify PASSED'` means the real
+   run will succeed.
+3. **Then `COMMIT`** — re-run the file unmodified.
+4. **Re-verify against the deployed database**, not the file.
+
+<Callout type="info">
+**Yes, ROLLBACK-first really works through the Management API**
+
+This is a natural thing to doubt — the endpoint is a one-shot HTTP query executor, and it
+is reasonable to worry that it auto-commits or that DDL escapes the transaction.
+**Verified 2026-07-24**: a `BEGIN; GRANT …; ROLLBACK;` sent to
+`POST /v1/projects/{ref}/database/query` left the privilege **unchanged** afterwards. The
+whole payload runs in one transaction and the `ROLLBACK` is honoured, including for DDL —
+Postgres has transactional DDL, and the endpoint does not defeat it. The rehearsal step is
+therefore genuinely free.
+</Callout>
+
+<Callout type="error">
+**The canonical rule: the database is ground truth**
+
+Not the migration files, not this page. Grants, ownership, and hand-made Dashboard objects
+all live *outside* the migration text unless a statement explicitly asserts them. Before
+relying on a file as the base for a `CREATE OR REPLACE`, confirm the **deployed** body:
+
+```sql
+SELECT pg_get_functiondef('public.accept_invitation(text)'::regprocedure);
+SELECT relrowsecurity FROM pg_class WHERE oid = 'public.idempotency_keys'::regclass;
+SELECT has_table_privilege('service_role', 'public.idempotency_keys', 'UPDATE');
+SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'device_push_tokens';
+```
+</Callout>
+
+## "Repair the database, the docs lag" — the lessons
 
 <Callout type="error">
 **The `roles_readable` leak**
@@ -62,17 +203,17 @@ dropped in migration `0047` (commit `fe25f53`). This single finding is why the t
 <Callout type="warning">
 **The repo can't fully reproduce the live DB (improving)**
 
-Migrations `0001`–`0043` were **applied by hand** via the Dashboard SQL Editor, so the
-CLI's tracking table was empty and a few objects (grants, ownership, a couple of
-Dashboard-created objects) drifted from the files. The service-role write grants were
-*"bitten 4×"* (migrations `0029`/`0032`/`0035`/`0042`). The fix in progress: a
-**CI migration-replay** job that replays `0001`→latest from scratch on every PR (catching
-drift automatically), plus a baseline step. See [CI/CD](/operations/ci-cd) and
-[Migrations workflow](/operations/migrations-workflow).
+Migrations `0001`–`0043` were applied by hand with no tracking, so a few objects (grants,
+ownership, a couple of Dashboard-created objects) drifted from the files. The service-role
+write grants were *"bitten 5×"* (`0029` / `0032` / `0035` / `0042` / `0056`). The fixes in
+progress: a **CI migration-replay** job that replays `0001`→latest from scratch on every PR
+(catching drift automatically) plus a baseline step, and the newer house rule that every
+migration grants and *asserts* its own `service_role` privileges. See
+[CI/CD](/operations/ci-cd) and [Migrations workflow](/operations/migrations-workflow).
 </Callout>
 
-## Applying migrations
+## Applying migrations to a fresh project
 
-For a fresh project, apply `0001`→`0047` **in order** (Dashboard SQL Editor, or the CLI).
-`db push` is **forward-only** — it never edits or reverts an applied migration; corrections
-are new migrations. See [Database migrations workflow](/operations/migrations-workflow).
+Apply `0001` → `0056` **in order** from the web repo's mirror (the only complete copy).
+Corrections are always *new* migrations — nothing already applied is ever edited or
+reverted. See [Database migrations workflow](/operations/migrations-workflow).

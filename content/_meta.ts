@@ -21,6 +21,12 @@ const meta: MetaRecord = {
   architecture: {
     title: 'Architecture',
   },
+  mobile: {
+    title: 'Mobile App',
+  },
+  'admin-console': {
+    title: 'Admin Console',
+  },
   database: {
     title: 'Database',
   },

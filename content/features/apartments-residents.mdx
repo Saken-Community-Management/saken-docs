@@ -18,9 +18,24 @@ Fields per apartment: **label** (required, unique in its building), **resident n
 
 ## Managing apartments
 
-`/dashboard/apartments` lists every unit with its status, balance, and an **Edit** action.
-`/dashboard/apartments/[id]` is the per-apartment detail. The shares running total shows
-at the top so an admin can see whether the entered weights look right.
+Two surfaces, deliberately separated:
+
+| Surface | Purpose |
+| --- | --- |
+| **`/dashboard/collections`** | The apartment **list** — every unit with its owes-YTD status and balance, each row tapping through to its ledger. |
+| **`/dashboard/apartments/[id]`** | The per-apartment **ledger** — collection history, dues snapshot, *"Owed to date"*. |
+| **`/dashboard/community/apartments`** | The apartment **editor** — labels, residents, shares, opening balances, with autosave. |
+| **`/dashboard/residents`** | The **resident** management view (invite to a slot, pending/joined state). |
+
+<Callout type="info">
+**Editing never routes into onboarding**
+
+`/dashboard/community` and its `apartments` / `budget` editors reuse the setup-wizard forms
+but **strip the wizard chrome** (wordmark, *"Step N of 6"*, Continue→Done) when
+`isPostSetup`. Editing an existing community never drops an admin back into the onboarding
+flow, and the ~34 defensive redirects that used to send stray requests to `/setup/basics`
+now go to `/no-community` instead.
+</Callout>
 
 <Callout type="info">
 **Resident name dedup is by normalized name**
@@ -36,8 +51,9 @@ their apartments; global rename is deferred to a future user-management UI.
 ## Residents
 
 A resident is simply a `users` row that some apartment's `current_user_id` points at — not
-a `roles` entry (see [Roles & role stacking](/concepts/roles)). Residents access Saken via
-a magic link; they never sign in.
+a `roles` entry (see [Roles & role stacking](/concepts/roles)). Most residents access Saken
+via a magic link and never sign in; a resident who accepts an invitation gets a real account
+and the authenticated mirror instead.
 
 Two resident surfaces exist:
 
@@ -54,16 +70,19 @@ ahead), and the community summary (cash, budget, collected %). They cannot write
 
 ## Sharing the access link
 
-From the apartments list, **Share link** opens a sheet: a WhatsApp target (active if a
-phone is on file), a copy-link fallback, and regenerate. Because automated delivery is
-stubbed, **copy-link + paste into WhatsApp** is the working path today.
+The dashboard header carries an icon-only **Share** button (`<ShareIconButton>`). Tapping it
+copies `/r/{apartmentId}/{viewToken}` — built from the first apartment with an assigned
+resident — to the clipboard and swaps the icon for a checkmark for two seconds. With no
+resident assigned anywhere it renders disabled, with a *"Assign a resident to share a link"*
+tooltip. **Copy-link + paste into WhatsApp** is the working path; there is no per-apartment
+share sheet and no regenerate affordance.
 
 <Callout type="warning">
-**Link permanence**
+**Link permanence — still no rotation UI**
 
 A resident's `view_token` is permanent and **survives apartment reassignment**
-(DECISIONS log, 2026-05-22). There is no rotation UI in v1; rotate via a direct DB
-`UPDATE` if a link leaks.
+(DECISIONS log, 2026-05-22). There is still no rotation UI; rotate via a direct DB
+`UPDATE` if a link leaks. On the [roadmap](/roadmap/missing-features).
 </Callout>
 
 ## The `apartments` table

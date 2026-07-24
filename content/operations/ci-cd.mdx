@@ -1,18 +1,60 @@
-import { Steps } from 'nextra/components'
+import { Steps, Callout } from 'nextra/components'
 
 # CI/CD pipeline
 
-Saken runs automated checks on every PR and push, and — crucially — applies **database
-migrations to production through CI behind a manual-approval gate**, instead of by hand in
-the Dashboard SQL Editor. The workflow is `saken/.github/workflows/ci.yml`.
+There are two different mechanisms in play, and it's worth separating them up front:
 
-## What runs
+- **Deployment** is platform-native. Vercel's Git integration builds the three web
+  surfaces; Render's `autoDeploy` builds the two backend services. Neither is driven by
+  GitHub Actions.
+- **Checks** are GitHub Actions — and there is exactly **one** workflow in the whole
+  system: `saken/.github/workflows/ci.yml`. The `saken-admin`, `saken-docs`,
+  `saken-backend`, and `saken-mobile` repos have **no `.github/workflows/` at all**; their
+  gate is the platform build (a failing `next build` / `nest build` fails the deploy).
+
+## Git-Flow, and what each branch deploys
+
+```
+feature/* ──▶ develop ──▶ main
+```
+
+| Branch | Web (`saken`) | Admin | Docs | Backend | Mobile |
+| --- | --- | --- | --- | --- | --- |
+| feature/* | no build (Ignored Build Step) | — | — | — | — |
+| `develop` (`dev` on the backend) | `dev.saken.com` | `admindev.saken.com` | `docsdev.saken.com` | `saken-api-dev` | — |
+| `main` | `saken.com` | `admin.saken.com` | `docs.saken.com` | `saken-api` | — |
+
+Note the branch-name asymmetry: the web repos use `develop`, the backend repo uses **`dev`**
+(that's what `render.yaml` tracks). Same role, different name.
+
+<Callout type="warning">
+**Mobile has no branch-triggered deploy at all.**
+
+`saken-mobile` ships via **EAS builds**, run on demand. Nothing merges-and-releases it, and
+nothing goes red when its branch falls behind. That's exactly how its branch drifted
+**11 commits** before being merged — with no deploy pressure, there is no feedback loop
+telling you the branch is stale. Treat "merge the mobile branch" as an explicit checklist
+item, not something the pipeline will remind you about.
+</Callout>
+
+## What actually runs in CI
+
+From `saken/.github/workflows/ci.yml` — triggers are every pull request and every push to
+`main`. Concurrency is grouped per ref with `cancel-in-progress`.
 
 | Job | Trigger | What it does |
 | --- | --- | --- |
-| **app** | every PR + push to `main` | `npm ci` → `npm run lint` → `npm run typecheck` → `npm run build` |
-| **migration-replay** | every PR + push to `main` | spins up a throwaway Supabase Postgres on the runner and replays **all** migrations `0001 → latest` from scratch (`supabase start`). Any migration that fails to apply fails the job. |
-| **deploy-migrations** | push to `main` **only**, **only when `supabase/migrations/**` changed** | `supabase db push` to production — **behind a manual-approval gate** (the `production` GitHub Environment). |
+| **changes** | every PR + push to `main` | `dorny/paths-filter` — sets a `migrations` output when `supabase/migrations/**` or `supabase/config.toml` changed. Gates the deploy job. |
+| **app** | every PR + push to `main` | Node 22 → `npm ci` → `npm run lint` → `npm run typecheck` → `npm run build`. The build gets dummy `NEXT_PUBLIC_SUPABASE_*` values — pages are dynamic, so no network happens at build time, and the service-role key is runtime-only. |
+| **migration-replay** | every PR + push to `main` | `supabase start` on the runner, which applies **every** migration `0001 → latest` to a throwaway Postgres. Any migration that fails to apply fails the job. Then `supabase db lint --level warning` (advisory, `continue-on-error`). |
+| **deploy-migrations** | push to `main` **only**, **only when migrations changed**, **only when `vars.MIGRATIONS_PIPELINE_READY == 'true'`** | `supabase link` → `supabase migration list --linked` → `supabase db push --linked --yes`, behind the `production` GitHub Environment's required-reviewer gate. |
+
+The Supabase CLI version is pinned (`SUPABASE_CLI_VERSION: "2.106.0"`) across all jobs so
+replays are reproducible; bump it together with `config.toml`.
+
+The workflow also declares least-privilege `permissions: contents: read, pull-requests:
+read` — `dorny/paths-filter` needs `pull-requests: read` to query changed files on a PR, and
+the default token doesn't have it ("Resource not accessible by integration").
 
 ```mermaid
 flowchart TD
@@ -21,78 +63,94 @@ flowchart TD
     App1 & Rep1 --> Merge[must pass to merge]
     Push[push to main] --> App2[app ✔]
     Push --> Rep2[migration-replay ✔]
-    Rep2 --> Deploy["deploy-migrations ⏸<br/>waits for approval"]
+    Push --> Chg[changes: migrations?]
+    App2 & Rep2 & Chg --> Gate{"MIGRATIONS_PIPELINE_READY<br/>== 'true' ?"}
+    Gate -->|no — today| Skip["skipped cleanly<br/>(migrations applied by hand)"]
+    Gate -->|yes| Deploy["deploy-migrations ⏸<br/>production environment approval"]
     Deploy --> DBpush[supabase db push]
 ```
 
-App deploys remain **Vercel's** job (auto-deploy on push); this pipeline touches only
-migrations + checks.
+### Why migration-replay matters
 
-## Why migration-replay matters
+The replay job is the antidote to Saken's biggest operational risk: **that the repo can't
+reproduce the live database.** By replaying `0001 → latest` from scratch on a fresh
+Postgres, it surfaces drift automatically — if a hand-applied migration doesn't cleanly
+replay, the job goes red, and that's the feature. This matters more than usual here,
+because production migrations *are* applied by hand (below), so the repo and the live DB
+are only kept honest by this job plus explicit verification.
 
-The replay job is the antidote to Saken's biggest operational risk: that the repo couldn't
-reproduce the live DB. By replaying `0001`→latest from scratch on a fresh Postgres, it
-**surfaces drift automatically** — if a hand-applied migration doesn't cleanly replay, the
-job goes red, and that's a feature, not a bug. The migration-replay + typed-data-layer work
-landed together in PRs #9 / #11 (2026-06-15).
+It also earns its keep because **Docker is broken on the dev machine**, so
+`supabase start` / `db reset` only run in CI. That's an acceptable place for them to live.
 
-## One-time setup
+## The open leg: production migrations are NOT automated
 
-Documented in `docs/CI-CD.md`. Done once:
+<Callout type="error">
+**`deploy-migrations` is gated off.** The repo variable `MIGRATIONS_PIPELINE_READY` is not
+set to `'true'`, so the job **skips cleanly** on every push (no red X). Production
+migrations are applied **by hand** — historically via the Supabase Dashboard SQL Editor,
+more recently via the Supabase **Management API** (`POST /v1/projects/<ref>/database/query`
+with an `sbp_` personal-access token — note: *not* the service-role key). This is GitHub
+issue **#19**, the last open leg of the pipeline.
+</Callout>
 
-1. **Baseline the migration history** (`scripts/baseline-migration-history.sh`) — because
-   `0001`–`0043` were applied by hand, the CLI tracking table was empty; the baseline marks
-   them applied so `db push` only applies *new* migrations. *Run exactly once.*
-2. **Add GitHub repo secrets:** `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
-   `SUPABASE_PROJECT_ID` (`zrjeehvlvhjaafhkxgsw`).
-3. **Create the `production` environment** with **Required reviewers** — this is the gate
-   that pauses `deploy-migrations` until someone clicks **Approve**.
-
-A repository variable `MIGRATIONS_PIPELINE_READY` gates the deploy step (commit `31ec48a`),
-so the pipeline can be enabled deliberately.
-
-## Day-to-day: shipping a migration
+The hand-apply discipline that stands in for the pipeline:
 
 <Steps>
 
-### Add the migration
+### Back up first
 
-Create `supabase/migrations/00NN_description.sql` in house style (`BEGIN; … COMMIT;` + a
-self-verifying block).
+Snapshot production before touching it. Supabase Pro gives daily backups + PITR, but the
+snapshot you take deliberately is the one you can reason about.
 
-### Open a PR
+### ROLLBACK-first inspect
 
-CI runs **app** + **migration-replay** — the replay proves your migration applies cleanly
-from scratch.
+Run the migration wrapped in `BEGIN; … ROLLBACK;` and read the verify block's output.
+Only then re-run it with `COMMIT;`. Every migration carries a self-verifying `DO $$ … $$`
+block that `RAISE EXCEPTION`s on a wrong post-state — that's the actual gate.
 
-### Merge to `main`
+### Verify against `pg_catalog`, not against the file
 
-**deploy-migrations** starts and **pauses for approval** (you'll see *"Waiting"* in the
-Actions tab and get an email).
+The migration file is a script log, not a statement of what's live. Confirm post-state with
+a direct catalog query (`pg_proc`, `pg_policy`, `has_table_privilege`, …). The database is
+ground truth.
 
-### Approve
+### Record it
 
-Review, click **Approve**. `supabase db push` applies only the new migration(s) to
-production. Confirm in the run logs.
+Update the [migration history](/database/migrations) in the same pass. A migration isn't
+shipped until the history says so.
 
 </Steps>
 
+Before the pipeline can be switched on, three one-time steps are still required (documented
+in `saken/docs/CI-CD.md`): baseline the CLI migration history (`0001`–`0043` were applied
+by hand, so the CLI's tracking table is empty and `db push` would try to re-apply
+everything); add the `SUPABASE_ACCESS_TOKEN` / `SUPABASE_DB_PASSWORD` / `SUPABASE_PROJECT_ID`
+Actions secrets; and create the `production` environment with required reviewers. Then flip
+`MIGRATIONS_PIPELINE_READY`.
+
+See [Database migrations](/operations/migrations-workflow) for the full workflow and house
+style.
+
+## Gaps in the checks themselves
+
+Worth naming honestly rather than assuming coverage exists:
+
+| Gap | Detail |
+| --- | --- |
+| **The test suite doesn't run in CI** | `saken` has a Vitest unit suite (`npm run test`) covering dues math, anchor math, budget diffs, and the formatters — but the `app` job runs `lint` → `typecheck` → `build` only. Nothing invokes `npm run test`. |
+| **Backend tests don't run in CI** | `saken-backend` has Jest unit + e2e configs (`npm run test`, `test:e2e`, `test:e2e:roles`). No workflow runs them; the only automated gate is the Docker build on Render. |
+| **Admin / docs / mobile have no checks** | No workflows. `saken-admin` and `saken-docs` are gated by the Vercel build (typecheck + build); mobile has no automated gate at all. |
+| **Branch protection** | Recorded in `saken/CLAUDE.md` as blocked by the private-repo plan tier — nothing currently prevents a direct push to `main`. Either upgrade the plan or enforce it in CI. |
+| **Seeding is disabled** | `supabase/config.toml` keeps `seed.sql` out of the replay; it was stale for a long time. Re-enable deliberately, not by accident. |
+
 ## Gotchas
 
-- **Local Docker was broken** on the dev laptop, so `supabase start` / `db reset` run only
-  in CI (GitHub runners have Docker). That's fine — the replay job is exactly where you want
-  it.
-- **Seeding is disabled** (`config.toml`): `seed.sql` is stale (it inserts a `users.role`
-  column dropped in `0020`). Refresh before re-enabling.
-- **`db push` is forward-only** — never edits or reverts an applied migration; write a
-  corrective migration instead.
-- **The CLI version is pinned** in the workflow to match `config.toml`'s expected schema;
-  bump both together.
-
-## Test suite
-
-Beyond the build/typecheck gate, the web app has a **Vitest unit suite** (added
-2026-06-15, PR #11) run by `npm run test`. It covers the pure functions — dues math
-(`money/apartment-rows.test.ts`), anchor math (`pre-saken/anchor-math.test.ts`), budget
-diff (`budget-versions/compute-diff.test.ts`), and the currency/date/Arabic formatters.
-This directly closed the audit's H-C1 *"no automated tests"* finding.
+- **`db push` is forward-only.** It never edits or reverts an applied migration — write a
+  corrective migration instead. (Migration `0031` superseding `0030` is the canonical
+  example.)
+- **The CLI version is pinned** in the workflow to match `config.toml`'s expected schema.
+  Bump both together or the replay breaks in a way that has nothing to do with your change.
+- **Feature branches don't build on Vercel.** If you're waiting for a preview URL on a
+  feature branch, you'll wait forever — push to `develop`.
+- **A Render env-var change made via the API doesn't redeploy.** Trigger the deploy
+  explicitly. See [Deployment](/operations/deployment).

@@ -2,34 +2,43 @@ import { Callout } from 'nextra/components'
 
 # Auth & RLS wiring
 
-Saken's authorization lives in **two layers that agree**: Postgres Row-Level Security at
-the bottom, and server-side role resolution on top. This page shows how a request binds to
-an identity and a complex.
+Saken's authorization lives in **layers that agree**: Postgres Row-Level Security at the
+bottom, server-side role resolution on top, and — since the backend shipped — the same
+resolution re-implemented once more inside `saken-api` from the same matrix. This page
+shows how a request binds to an identity, a set of roles, and a complex.
 
 ## The chain
 
+The web app's fallback path and the API path bind identity the same way; only the transport
+differs.
+
 ```mermaid
 sequenceDiagram
-    participant U as User
+    participant U as User (web / mobile / CLI)
     participant App as Next.js server action
-    participant SB as Supabase cookie client
+    participant API as saken-api (NestJS)
     participant PG as Postgres (RLS)
     U->>App: submit (cookie carries JWT)
-    App->>App: requireUser / requireAdminUser
-    App->>App: resolve*ComplexId (server-derived)
-    App->>SB: write through cookie client
-    SB->>PG: PostgREST sees the user's JWT
+    App->>App: requireUser / can(roles, capability)
+    App->>API: POST /v1/… with Authorization: Bearer &lt;access token&gt;
+    API->>API: JwtAuthGuard → JWKS signature verify
+    API->>API: AuthContextService → effective roles + active complex
+    API->>PG: per-request client carrying the SAME JWT
     PG->>PG: RLS policy calls current_*_complex_id()
-    PG-->>SB: rows the policy allows
-    SB-->>App: typed result
+    PG-->>API: rows the policy allows
+    API-->>App: typed result / typed error
 ```
+
+When `SAKEN_API_URL` is unset — or the read adapter returns `null` — the middle two hops
+collapse and the server action writes through its own cookie client. **The policy that
+fires is the same one either way**, which is the entire reason the cutover was reversible.
 
 ## Layer 1 — RLS policies
 
-Every table has RLS **enabled**. Production runs **52 policies across 15 tables** (plus 3
-deny-by-default tables with RLS on and zero policies — reads there go only through
-service-role). Policies are keyed off the authenticated identity via a set of SQL helper
-functions:
+Every table has RLS **enabled**. Production runs ~55 policies across 16 tables, plus a set
+of tables with RLS on and **zero** policies — deny-by-default, reachable only through
+service-role or a `SECURITY DEFINER` function. Policies are keyed off the authenticated
+identity via SQL helper functions:
 
 | Helper | Returns |
 | --- | --- |
@@ -38,12 +47,32 @@ functions:
 | `current_treasurer_complex_id()` | …treasurer |
 | `current_concierge_complex_id()` | …concierge |
 | `current_resident_complex_id()` | …resident (matched via apartment → building) |
+| `is_platform_admin()` | whether the caller is a platform superuser (see below) |
 
-All five are **`SECURITY DEFINER`, `STABLE`, `search_path=''`, owned by `service_role`**,
-and resolve identity from **email OR phone**, dual-row-safe and `deleted_at`-aware
-(final bodies set by migration `0043`, refined by `0046`). They are also **active-aware**
-(migration `0034`) — they resolve against `users.active_complex_id` so a multi-community
-user is scoped to the community they're acting in.
+All five `current_*` helpers are **`SECURITY DEFINER`, `STABLE`, `search_path=''`, owned by
+`service_role`**. They are:
+
+- **identity-dual** — they resolve from **email OR phone** (`auth.jwt()->>'phone'`), so
+  phone-only accounts work (migration `0043`);
+- **dual-row-safe** — an email can legitimately map to *two* `users` rows, a placeholder
+  (`auth_provider IS NULL`) and an authenticated one, so every lookup filters
+  `auth_provider IS NOT NULL` and lower-cases the email (`0036`);
+- **deterministic** — `ORDER BY id` before `LIMIT 1`, after a bare `LIMIT 1` cross-wired two
+  identities in the 2026-06-15 incident (`0046`);
+- **`deleted_at`-aware** — soft-deleted complexes are invisible to every cookie-bound read
+  (`0038`);
+- **active-aware** — they resolve against `users.active_complex_id`, filter-not-fallback
+  (`0034`). See [Multi-tenant isolation](/architecture/multi-tenant).
+
+<Callout type="error">
+**Empty strings are not identities**
+
+The 2026-06-15 incident was an **empty-string phone** on a `users` row matching across
+identities inside the helpers, letting a signed-in user resolve into another user's complex.
+Migration `0045` forbids `email = ''` and `phone = ''` outright; `0044` adds
+`uniq_authenticated_phone` to mirror `uniq_authenticated_email`. Both are CHECK/UNIQUE
+constraints rather than app-layer guards, because the app layer is not the only writer.
+</Callout>
 
 ## Layer 2 — server-side resolution
 
@@ -54,34 +83,120 @@ caller *before* touching the DB, and scope-check client-supplied IDs:
   complexId }` (or a typed error), optionally constrained to a role list, e.g.
   `requireUser(supabase, ['admin', 'treasurer'])`.
 - `resolve-admin-complex-id.ts`, `resolve-treasurer-complex-id.ts`, etc. — the per-role
-  resolvers.
+  resolvers, each applying the same filter-not-fallback active-complex rule.
+- `lookup-authenticated-user-by-email.ts` / `-by-phone.ts` — the app-layer half of the
+  dual-row rule. Every email-keyed lookup of `users` must go through these.
 - Scope checks like `verifyApartmentInComplex` ensure a client-passed `apartmentId`
   belongs to the caller's complex.
 
 The two layers are belt-and-braces: even if a server action forgot a scope check, RLS would
 still refuse cross-complex rows.
 
-## Auth providers
+## Stackable roles and the capability matrix
 
-Supabase Auth backs sign-in: **Google OAuth**, **email magic-link**, and **phone OTP** (via
-an SMS provider, with a `send-otp` edge function). After sign-in, the route handler matches
-the authenticated email/phone to a `public.users` row to route new-vs-returning (see
+Roles are **stackable**. `roles` is unique on `(user_id, complex_id, role)` (migration
+`0049`), so one person can hold admin **and** treasurer **and** concierge in the same
+community. A plain resident still has no `roles` row at all — residency *is* an
+`apartments.current_user_id` match.
+
+Effective permissions are therefore the **union** of the roles held, read through an
+explicit matrix rather than inferred from a single role string:
+
+| Function | File | What it does |
+| --- | --- | --- |
+| `getEffectiveRoles(service, userId, complexId)` | `src/lib/auth/get-effective-roles.ts` | Active `roles` rows for the complex, plus `'resident'` if the user occupies an apartment there |
+| `can(roles, capability)` | `src/lib/auth/capabilities.ts` | `CAPABILITY_MATRIX[capability].some(r => held.has(r))` — union semantics |
+| `primaryRole(roles)` | `src/lib/auth/roles.ts` | Walks `ROLE_PRECEDENCE` (`admin > treasurer > concierge > resident`) to pick a **landing surface**. Explicitly *not* for permission checks |
+
+The 13 capabilities are `view_dashboard`, `record_collections`, `record_expenses`,
+`submit_expense`, `review_submissions`, `edit_community`, `edit_budget`,
+`manage_special_projects`, `record_project_contribution`, `fiscal_rollover`,
+`manage_roles`, `assign_residents`, `delete_community`. Note `submit_expense` is
+concierge-**only** — the matrix is not a ladder.
+
+Roles are **assigned**, not bearer-invited: an admin grants and revokes at
+`/dashboard/team`, which calls the `assign_role` / `revoke_role` `SECURITY DEFINER` RPCs
+(migration `0050`). Those RPCs re-check that the caller holds an active admin role in the
+target complex, write `assigned_by` / `assigned_at`, and `revoke_role` refuses to remove a
+complex's **last** admin. Role hand-off is therefore assign-then-revoke, not a bespoke
+transfer flow.
+
+<Callout type="info">
+**The backend re-implements this once, from the same matrix**
+
+`saken-api` ports `CAPABILITY_MATRIX` verbatim into `src/domain/capabilities.ts` and gates
+handlers with `@RequireCapability('manage_roles')` (`src/auth/capability.decorator.ts`) or
+an imperative `auth.requireCapability(...)`. `AuthContextService` mirrors
+`getEffectiveRoles`, the `current_user_id` identity rule, and the filter-not-fallback
+active-complex rule. It is a second implementation of the same table — kept honest by both
+sides having tests, and by RLS refusing anything either of them gets wrong.
+</Callout>
+
+## The platform superuser tier
+
+Above every community sits a separate tier: the `platform_admins` table plus
+`is_platform_admin()` (migration `0051`). The table has RLS **on with no policies** —
+deny-by-default — so it is reachable only via service-role or the function, and the
+function reads `auth.email()` internally so a caller cannot pass an identity in.
+
+This tier is **not used by the product web app at all** (there is no `is_platform_admin`
+reference under `saken/src`). Its only consumer is
+[`saken-admin`](/admin-console/overview), which authorizes a caller if they are an active
+superuser *or* their email is in an env allowlist (bootstrap / break-glass), enforces it in
+middleware **and** re-checks it per mutation, and records every write to an append-only
+`admin_audit_log` (migration `0052`).
+
+## Auth providers and the token path
+
+Supabase Auth backs sign-in: **Google OAuth**, **email + password** (with email-OTP
+verification), **email magic link**, and **phone OTP** (via an SMS provider and a
+`send-otp` edge function). After sign-in, the route handler matches the authenticated
+email/phone to a `public.users` row to route new-vs-returning (see
 [First admin account](/getting-started/first-admin)).
+
+How each surface obtains and presents that token:
+
+| Surface | Token source | Presented as |
+| --- | --- | --- |
+| Web (fallback path) | `@supabase/ssr` cookie client | Cookie → PostgREST |
+| Web (API path) | `supabase.auth.getSession()` in `src/lib/api/client.ts` | `Authorization: Bearer` to `saken-api` |
+| Mobile | Supabase RN client, session persisted in an **encrypted secure store**, `autoRefreshToken` on | `Authorization: Bearer` to `saken-api` |
+| `saken-mcp` / `saken-cli` | Stored profile credentials with auto-refresh | `Authorization: Bearer` to `saken-api` |
+| Magic-link resident | No token at all — a 256-bit `apartments.view_token` in the URL | Validated server-side; reads run through service-role |
+
+`saken-api` verifies the Bearer token with **JWKS signature verification**
+(`SupabaseService.verifyAccessToken`, using `jose`'s `createRemoteJWKSet` against
+`/auth/v1/.well-known/jwks.json`) and pins `issuer`, `audience: 'authenticated'`, and
+`algorithms: ['RS256','ES256']`. Anything the local verifier can't resolve — a legacy
+HS256 token, an unknown `kid` — falls through to the authoritative
+`auth.getUser(accessToken)` network check rather than being rejected. The guard then
+attaches both the auth user and a **per-request Supabase client built from the anon key
+plus that same token**, which is what makes RLS fire identically behind the API.
+
+The mobile app's OAuth and magic-link redirects use **per-variant custom schemes**
+(`sakenmobile-dev` / `sakenmobile-preview` / `sakenmobile`), read from the resolved Expo
+config rather than hardcoded, with PKCE `exchangeCodeForSession`. Universal links are
+scoped the same way — `dev.saken.com` for dev and preview, `saken.com` only for production
+— so a preview build can never claim production's invite links.
 
 <Callout type="info">
 **`getUser()` vs `getClaims()`**
 
-Auth resolvers use `getUser()` (a server-validated JWT round-trip). Two mutating actions
-(`setActiveComplex`, `updateMyLanguage`) use the locally-decoded `getClaims()` (audit
-M-A1). Impact is currently bounded by membership prechecks, but the audit recommends
-standardising on `getUser()` (or confirming `getClaims()` verifies signatures via JWKS).
+Auth resolvers and the role-landing gates (`/dashboard`, `/resident`, `/concierge`,
+`/auth`) use `getUser()` — a server-validated JWT round-trip; standardising those killed a
+reload-loop crash class. Two mutating actions (`setActiveComplex`, `updateMyLanguage`)
+still use the locally-decoded `getClaims()` on their fallback path. Impact is bounded by
+membership prechecks and server-derived ids, but the earlier audit's recommendation to
+standardise remains open.
 </Callout>
 
 ## The hard-won lesson
 
-Saken's RLS journey included an incident where policies ran as permissive stubs in
-production for ~2 days, and a critical `roles_readable` view (created by hand in the
-Dashboard, in no migration) leaked every user's email to the anon key until it was found
-by **introspecting the live DB** and dropped (migration `0047`). The operating rule that
-emerged: **the live database is ground truth, not the migration files or the docs.** See
+Saken's RLS journey includes an incident where policies ran as permissive stubs in
+production for ~2 days, a `roles_readable` view (created by hand in the Dashboard, in no
+migration) that leaked every user's email to the anon key until it was found by
+**introspecting the live DB** and dropped (migration `0047`), and the empty-string identity
+collision above. The operating rule that emerged — and that the 2026-07-23 audit followed
+by checking schema claims against `pg_catalog` rather than migration files — is: **the live
+database is ground truth, not the migration files and not the docs.** See
 [Migration history](/database/migrations).

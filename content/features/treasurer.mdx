@@ -20,39 +20,57 @@ full vertical (commit `3dbb304`, *"treasurer: new role, RLS, routing, UI, invite
 | Run year-end rollover, reset/delete the community | ❌ No — admin only |
 | Manage invitations | ❌ No — admin only |
 
-The split is enforced at the action layer: write actions that a treasurer shares call
-`requireUser(supabase, ['admin', 'treasurer'])`, while ownership actions call
+The split is enforced at the action layer, now via the **capability matrix** rather than
+hard-coded role lists: shared write actions call
+`requireCapability(supabase, 'record_collections' | 'record_expenses' | …)`, which resolves
+the capability against the **union** of the caller's stacked roles; ownership actions call
 `requireAdminUser`. RLS gives the treasurer full write on `payments` and `expenses`.
 
 ## Where treasurer surfaces appear
 
-- **`/dashboard/treasurers`** — the admin's management page to invite/list treasurers.
-- **`/dashboard/treasurers/invite`** — create a treasurer invitation.
+- **`/dashboard/team`** — the admin's *Team & roles* page: the single place elevated roles
+  are granted and revoked.
 - **Treasurer-scoped `/resident/*` routes** carry a treasurer **badge** and expose a
   *Treasurer Tools* section, so a treasurer who is also a resident gets write affordances
   inside the resident surface.
+- **`/dashboard/treasurers`** is now a **deprecated redirect stub → `/dashboard/team`**,
+  kept only so stale bookmarks land somewhere live. (Same for `/dashboard/concierges`.)
 
 ## How someone becomes a treasurer
 
+<Callout type="info">
+**Assigned, not invited** (permissions redesign, migrations `0049`/`0050`)
+
+The bearer-invite flow for elevated roles was retired on 2026-07-01. An admin now **assigns**
+the role directly.
+</Callout>
+
 ```mermaid
 flowchart LR
-    A[Admin] -->|createInvitation role=treasurer| I[(invitation)]
-    I -->|invitee accepts| RPC[accept_invitation]
-    RPC --> Role[(roles row: treasurer)]
+    A[Admin at /dashboard/team] -->|assignRole userId or email| RPC[assign_role RPC]
+    RPC --> Role[(roles row: treasurer<br/>+ assigned_by, assigned_at)]
     Role --> Stack{Already a resident?}
     Stack -- yes --> Both[Resident + Treasurer<br/>role stacking]
     Stack -- no --> NonRes[Non-resident treasurer<br/>no apartment needed]
 ```
 
-A treasurer is a `roles` row (`role = 'treasurer'`, added to the enum in migration
-`0025`), scoped to one complex. They **do not need an apartment** — a hired bookkeeper
-fits cleanly — and an existing resident who accepts a treasurer invite simply **gains** the
-role ([role stacking](/concepts/roles)).
+A treasurer is a `roles` row (`role = 'treasurer'`, added to the enum in migration `0025`),
+scoped to one complex. They **do not need an apartment** — a hired bookkeeper fits cleanly.
+Since `0049` the uniqueness key is `(user_id, complex_id, role)`, so roles **stack**: a
+resident who is granted treasurer simply *gains* it ([role stacking](/concepts/roles)).
+
+`assignRole` takes either a `userId` or an **email**, which resolves to an existing
+authenticated user or a reused/created placeholder row — so the grant can be made before the
+person has ever signed in, and applies on their first sign-in. Both RPCs are `SECURITY
+DEFINER`, admin-scoped, and audited via `assigned_by` / `assigned_at`; `revoke_role` removes
+one specific role and never disturbs the others.
 
 <Callout type="warning">
-**No hand-off / transfer**
+**Assign/revoke exists; an explicit *transfer* flow does not**
 
-You can invite and revoke treasurers, but there is **no transfer or promote/demote
-flow** (Feature Audit item 4, *Missing*). To "move" the role you revoke one and invite
-another. On the [roadmap](/roadmap/missing-features).
+An admin can now grant and revoke admin and treasurer roles from `/dashboard/team`, so
+"moving" a role is two deliberate steps rather than a revoke-and-re-invite dance. What's
+still missing is a **guided hand-off** — promote-then-demote as one confirmed operation,
+with the guardrails that implies. Tracked as issue **#26**, still on the
+[backlog](/roadmap/missing-features).
 </Callout>

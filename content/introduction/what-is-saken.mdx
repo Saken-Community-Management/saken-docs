@@ -4,9 +4,14 @@ import { Callout } from 'nextra/components'
 
 Saken (`saken.com`) is a **shared ledger and budgeted-operations tool** for residential
 communities — low-rise buildings and small complexes in Lebanon, 5–100 apartments,
-where one resident volunteers to run the community's finances. It is a **web-first PWA**:
-it installs to a phone home screen, works on desktop, and has no native app and no app
-store.
+where one resident volunteers to run the community's finances.
+
+It started **web-first** and still is: the mobile-shaped web app at `saken.com` is where
+every community lives today. Since then it has grown a **native React Native app** (built
+and running on EAS, [not yet in a store](/introduction/status)) and an internal
+**[admin console](/admin-console/overview)** that Saken's own operators use to fix things
+the product deliberately can't fix for itself. All three read one shared database through
+one shared API — see [Architecture overview](/architecture/overview).
 
 ## The problem it replaces
 
@@ -35,8 +40,8 @@ From the locked v1 scope, Saken does twelve things:
    recalculation is forward-going only.
 4. **Manage apartments and shares** — shares are proportional weights (nominally out of
    1000) at the complex level.
-5. **Sign admins up easily** — Google, email magic-link, or phone/WhatsApp OTP. No
-   passwords.
+5. **Sign admins up easily** — Google, email magic-link, phone OTP, or (added later)
+   email + password with an OTP verification step.
 6. **Record payments and log expenses** — admin directly, or concierge submits for
    approval.
 7. **Manage the concierge** — a restricted, Arabic right-to-left surface that can only
@@ -61,8 +66,14 @@ Saken started with **three roles** and grew a fourth:
 - **Treasurer** — added after the original spec; shares the admin's financial powers
   (record payments/expenses, approve submissions) without being the community owner.
 
-See [Roles & role stacking](/concepts/roles) for how a single person can hold more than
-one of these at once.
+Roles are **stackable** and **assigned by the admin** (at `/dashboard/team`), not claimed
+by invite link: one person can hold admin *and* treasurer in the same community, and their
+effective permissions are the union of what those roles grant. See
+[Roles & role stacking](/concepts/roles).
+
+Above all of these sits a fifth, non-product tier: the **platform superuser**, who
+operates the [admin console](/admin-console/overview) across every community. No community
+member ever sees it.
 
 ## Pilot target & success criterion
 
@@ -75,18 +86,28 @@ The success criterion is deliberately concrete:
 
 ## What v1 explicitly does **not** do
 
-Online payments or bank integration · a single user in multiple communities (multi-
-community was later partially added — see [Multi-community](/concepts/multi-community))
-· tenant-vs-owner distinction · any non-USD currency · system-calculated late fees · a
-late-payer warning flag · voting/decision logs · in-app announcements or chat · cash
-reconciliation/variance/handover logs · savings pots beyond special collections ·
-resident self-signup · custom dashboards/report templates · full edit-version history of
-payments/expenses · an Arabic UI for residents and admins · push notifications.
+Online payments or bank integration · tenant-vs-owner distinction · any non-USD currency ·
+system-calculated late fees · a late-payer warning flag · voting/decision logs · in-app
+announcements or chat · cash reconciliation/variance/handover logs · savings pots beyond
+special collections · resident self-signup · custom dashboards/report templates · full
+edit-version history of payments/expenses.
+
+Four items from that original exclusion list have since been built anyway, and are worth
+knowing about because the locked-scope document still lists them as out:
+
+| Originally out of scope | What actually shipped |
+| --- | --- |
+| A single user in multiple communities | Multi-community with an active-community pointer — see [Multi-community](/concepts/multi-community) |
+| An Arabic UI for residents and admins | Full EN/AR localisation across the whole app via next-intl (cookie locale, no URL routing). Arabic strings are still awaiting native review |
+| Push notifications | The mobile app registers devices and receives payment-reminder pushes |
+| A native app | `saken-mobile` is built and on EAS, though not yet published |
 
 <Callout type="info">
 **Currency & language**
 
 Saken is **USD-only** — every amount renders with a `$` prefix, and money columns are
-`NUMERIC(12,2)` end-to-end (never floats). The admin/resident UI is **English**; the
-concierge surface is **Arabic, right-to-left**.
+`NUMERIC(12,2)` end-to-end (never floats). Every surface is available in **English and
+Arabic**; the concierge surface defaults to **Arabic, right-to-left**. The locale is a
+cookie (persisted to `users.language` once signed in), not a URL segment — so every route
+path in these docs is the real one in both languages.
 </Callout>

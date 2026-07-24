@@ -2,10 +2,12 @@ import { Callout } from 'nextra/components'
 
 # Server actions
 
-In the web app, **server actions** *are* the API. They live under `src/lib/<domain>/`,
-marked `'use server'`, and follow a consistent shape: authenticate → resolve role/complex
-server-side → scope-check client IDs → write through the RLS-aware client → return a typed
+In the web app, **server actions** *are* the API surface the UI talks to. They live under
+`src/lib/<domain>/`, marked `'use server'`, and follow a consistent shape: authenticate →
+resolve capability/complex server-side → scope-check client IDs → write → return a typed
 result or a typed error.
+
+Since the backend cutover, most of them have **two bodies behind one signature**.
 
 ## The standard shape
 
@@ -13,10 +15,14 @@ result or a typed error.
 export async function createPayment(
   input: PaymentFormValues,
 ): Promise<PaymentFormSaveResult> {
+  // 0. Backend path — same signature, same result shape
+  if (isBackendEnabled()) return createPaymentViaApi(input)
+
+  // …original direct-Supabase implementation, unchanged…
   const supabase = await createClient()
 
-  // 1. Authenticate + resolve role & complex (server-derived)
-  const userResult = await requireUser(supabase, ['admin', 'treasurer'])
+  // 1. Authenticate + resolve capability & complex (server-derived)
+  const userResult = await requireCapability(supabase, 'record_collections')
   if ('error' in userResult) return { error: userResult.error }
   const { userId, complexId } = userResult
 
@@ -28,65 +34,127 @@ export async function createPayment(
 }
 ```
 
+Three things to notice:
+
+1. **The guard is one line at the top.** `isBackendEnabled()` is true only when
+   `SAKEN_API_URL` is set; the adapter (`src/lib/api/<domain>.ts`) returns the
+   **byte-identical result shape**, so nothing downstream branches. Full mechanics in
+   [Backend architecture](/architecture/backend).
+2. **Gates are capability-based, not role-based.** `requireCapability(supabase, 'record_collections')`
+   resolves through `CAPABILITY_MATRIX` over the union of the caller's **stacked** roles,
+   rather than hard-coding `['admin','treasurer']`. See
+   [Roles & role stacking](/concepts/roles).
+3. **The web concerns stay web-side** either way — `revalidatePath`, `redirect`, and the
+   `{ … } | { error }` result shapes client components expect never move behind HTTP.
+
 Every Supabase error is checked and surfaced as a typed user message; nothing is silently
 swallowed (the one documented exception is the budget-version snapshot, audit M-C7).
 
 ## The catalogue
 
-### Invitations — `src/lib/invitations/actions.ts`
-| Action | Auth | Notes |
-| --- | --- | --- |
-| `createInvitation(input)` | admin | role/apartment slot rules, 256-bit token, 30-day expiry |
-| `revokeInvitation(...)` | admin | sets `revoked_at` |
-| `reinviteInvitation(...)` | admin | re-issues delivery |
-| `acceptInvitation(...)` | invitee | calls `accept_invitation` RPC |
+`Backend` = the action delegates to `saken-api` when `SAKEN_API_URL` is set, and falls
+back to the direct-Supabase body otherwise.
 
-### Payments — `src/lib/payments/actions.ts`
-| Action | Auth |
-| --- | --- |
-| `createPayment(input)` | admin / treasurer |
-| `updatePayment(...)` | admin / treasurer |
-| `deletePayment(...)` | admin / treasurer (soft-delete) |
+### Invitations — `src/lib/invitations/actions.ts`
+| Action | Gate | Backend | Notes |
+| --- | --- | --- | --- |
+| `createInvitation(input)` | admin | ✅ | role/apartment slot rules, 256-bit token, 30-day expiry |
+| `revokeInvitation(...)` | admin | ✅ | sets `revoked_at` |
+| `reinviteInvitation(...)` | admin | ✅ | re-issues + re-delivers |
+| `acceptInvitation(token)` | invitee | ✅ | `accept_invitation` RPC; identity-bound since `0048` |
+
+### Collections — `src/lib/payments/actions.ts`
+| Action | Gate | Backend |
+| --- | --- | --- |
+| `createPayment` · `updatePayment` · `deletePayment` (soft) | `record_collections` | ✅ |
+
+`src/lib/payments/pre-saken-actions.ts` — `savePreSakenPayments`, `savePreSakenPaymentRow`
+(admin; per-row autosave for pre-anchor bulk entry). Direct-Supabase only.
 
 ### Expenses — `src/lib/expenses/actions.ts`
-| Action | Auth |
-| --- | --- |
-| `createExpense(input)` | admin / treasurer (posts `approved`) |
-| `updateExpense(...)` · `deleteExpense(...)` | admin / treasurer |
+| Action | Gate | Backend |
+| --- | --- | --- |
+| `createExpense` (posts `approved`) · `updateExpense` · `deleteExpense` | `record_expenses` | ✅ |
+| `savePreSakenExpenseRow` · `savePreSakenExpenses` (`pre-saken-actions.ts`) | admin | ✅ |
 
 ### Concierge & approvals
-| Action | File | Auth |
-| --- | --- | --- |
-| `submitConciergeExpense(input)` | `concierge/actions.ts` | concierge (posts `pending`) |
-| `updateConciergeExpense(...)` | `concierge/actions.ts` | concierge (while pending) |
-| `approveConciergeSubmission(...)` | `admin-submissions/actions.ts` | admin / treasurer |
-| `rejectConciergeSubmission(...)` | `admin-submissions/actions.ts` | admin / treasurer |
+| Action | File | Gate | Backend |
+| --- | --- | --- | --- |
+| `submitConciergeExpense` (posts `pending`) | `concierge/actions.ts` | concierge | ✅ |
+| `updateConciergeExpense` (while pending) | `concierge/actions.ts` | concierge | ✅ |
+| `approveConciergeSubmission` | `admin-submissions/actions.ts` | `review_submissions` | ✅ |
+| `rejectConciergeSubmission` | `admin-submissions/actions.ts` | `review_submissions` | ✅ |
 
 ### Special projects — `src/lib/special-projects/actions.ts`
-| Action | Auth |
-| --- | --- |
-| `createProject` · `updateProject` · `upsertProjectShare` · `closeProject` | admin |
-| `recordProjectContribution(projectId, input)` | admin / treasurer |
-
-### Fiscal year & membership
-| Action | File | Auth |
+| Action | Gate | Backend |
 | --- | --- | --- |
-| `rolloverFiscalYear()` | `fiscal/rollover-actions.ts` | admin (→ `rollover_fiscal_year` RPC) |
-| `setActiveComplex(...)` | `membership/set-active-complex-action.ts` | any member |
-| `exitCommunity(...)` | `membership/exit-community-action.ts` | non-admin (→ `exit_community` RPC) |
-| `deleteCommunity(...)` | `membership/delete-community-action.ts` | admin (→ `delete_community` RPC) |
-| `updateMyLanguage(...)` | `i18n/update-my-language-action.ts` | any user |
+| `createProject` · `updateProject` · `upsertProjectShare` · `closeProject` | admin | ✅ |
+| `recordProjectContribution(projectId, input)` | `record_project_contribution` | ✅ |
+
+### Roles & team — `src/lib/roles/actions.ts`
+| Action | Gate | Backend | Notes |
+| --- | --- | --- | --- |
+| `assignRole(complexId, target, role)` | admin | ✅ | → `assign_role` RPC (`0050`); target is a `userId` **or** an email that resolves to an existing user or a new placeholder |
+| `revokeRole(complexId, userId, role)` | admin | ✅ | → `revoke_role` RPC; stackable — never disturbs the caller's other roles |
+
+### Fiscal year, membership & preferences
+| Action | File | Gate | Backend |
+| --- | --- | --- | --- |
+| `rolloverFiscalYear()` | `fiscal/rollover-actions.ts` | admin (→ `rollover_fiscal_year` RPC) | ✅ |
+| `setActiveComplex(...)` | `membership/set-active-complex-action.ts` | any member | ✅ |
+| `exitCommunity(...)` | `membership/exit-community-action.ts` | non-admin (→ `exit_community` RPC) | ✅ |
+| `deleteCommunity(...)` | `membership/delete-community-action.ts` | admin (→ `delete_community` RPC) | ✅ |
+| `updateMyLanguage(...)` | `i18n/update-my-language-action.ts` | any user | ✅ |
+| `setLocale(...)` | `i18n/set-locale-action.ts` | anyone (pre-login) | — cookie only |
+
+### Auth — `src/lib/auth/password-actions.ts`
+| Action | Notes |
+| --- | --- |
+| `signInWithPasswordAction(email, password, next?)` | server action **on purpose**: a client-side `signInWithPassword` writes the SSR cookie a tick after it resolves, so an immediate navigation races the write. Doing it server-side sets the cookie and `redirect()`s in one round-trip. |
+| `verifySignupOtpAction(email, code, next?)` | verifies the 6-digit signup OTP, then routes onward. `next` is guarded to the `/invite/` prefix only. |
+
+### Monthly collection schedule — `src/lib/collections/schedule-actions.ts`
+| Action | Gate | Notes |
+| --- | --- | --- |
+| `saveMonthWeight(input)` · `saveMonthlySchedule(rows)` | admin | Writes `collection_month_weights` (migration `0054`). **Sparse storage**: a weight of exactly `1` DELETEs the row rather than writing a redundant default. Always targets the **active** fiscal year, derived server-side. Direct-Supabase only. |
+
+### Reminders — `src/lib/reminders/actions.ts`
+| Action | Gate | Notes |
+| --- | --- | --- |
+| `sendPaymentReminders()` | `['admin','treasurer']` | **Backend-only vertical.** The web tier has no mail credentials, so there is deliberately **no direct-Supabase fallback** — with the backend disabled it returns a localised *"backend required"* error. See [Delivery](/api/delivery). |
 
 ### Setup wizard — `src/lib/setup/`
-Idempotent `useEnsure*` helpers (`useEnsureComplex`, `useEnsureBuilding`,
+Idempotent `useEnsure*` **client hooks** (`useEnsureComplex`, `useEnsureBuilding`,
 `useEnsureApartment`, `useEnsureResident`, `useEnsureBudgetLine`) insert/update wizard rows
-with autosave. `useEnsureComplex` calls the atomic `create_complex_with_admin` RPC.
+with autosave. `useEnsureComplex` calls the atomic `create_complex_with_admin` RPC. These are
+the one vertical **not** behind the backend guard — they run in the browser against the
+session-scoped Supabase client, so wiring them means converting them to server actions first.
+The backend has the equivalent endpoints (`POST /v1/complexes`, `/buildings`, `/apartments`,
+`/residents`), and the MCP/CLI clients already use them.
 
-<Callout type="info">
-**Migrating to the backend**
+## Reads follow the same pattern
 
-Each of these actions has a mirror endpoint in `saken-server` (see
-[Backend endpoints](/api/backend-endpoints)). The web app can be migrated to call the
-backend incrementally — the strangler pattern — without changing behaviour, because both
-sit on the same RLS + RPCs.
+Data loaders aren't `'use server'` actions, but they carry the identical guard — and this is
+where the fallback matters most, because a degraded backend must not take a page down:
+
+| Loader | Backend endpoint |
+| --- | --- |
+| `setup/fetch-summary-data.ts` | `GET /summary?fy=` |
+| `admin-submissions/fetch.ts` · `concierge/fetch.ts` | `/admin/submissions`, `/concierge/submissions` |
+| `special-projects/fetch.ts` | `/special-projects` |
+| `roles/fetch-members.ts` | `/communities/:id/members` |
+| `budget-lines/fetch-options.ts` | `/budget/line-options` |
+| `payments/fetch-apartments-for-payment-form.ts` | `/payments/form-data` |
+| PDF routes (`/api/**/reports/ytd`, `/api/**/receipt`) | proxied via `backendFetchRaw` |
+
+<Callout type="warning">
+**The fallback contract has teeth now**
+
+The 2026-07-23 audit found three places where the read-fallback contract was *sound in
+design but not honoured in code* — an unguarded `res.data` deref could 500 `/dashboard`
+instead of falling back (#82), and `backendFetch` had no timeout, so a backend that accepted
+the socket and then stalled hung the Server Component to the Vercel 504 (#87). Both are
+fixed: every mapping is wrapped and returns `null` on anything malformed, and
+`AbortSignal.timeout(6000)` turns a hung backend into the same `null` a connection error
+produces. See the [roadmap](/roadmap/missing-features).
 </Callout>

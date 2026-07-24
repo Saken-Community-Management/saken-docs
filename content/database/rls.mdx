@@ -2,8 +2,21 @@ import { Callout } from 'nextra/components'
 
 # RLS policies
 
-Row-Level Security is Saken's authorization spine. The live database runs **52 policies
-across 15 tables**, with RLS **enabled on all 18 tables** (3 of them deny-by-default).
+Row-Level Security is Saken's authorization spine. RLS is **enabled on all 23 public
+tables**. **16 of them carry policies — 55 in total**; the other **7 have RLS on and zero
+policies**, which is deny-all.
+
+<Callout type="info">
+**Where the count comes from**
+
+52 policies across 15 tables was confirmed by introspecting the live database on
+2026-06-14, and replaying the `CREATE POLICY` / `DROP POLICY` statements through migration
+`0047` reproduces exactly that figure. Only one migration since has added policies —
+`0054`, with three — so the current number is **55 across 16 tables**. Separately, **9
+Storage policies** govern the `expense-receipts` bucket on `storage.objects` (`0006` for
+admin, re-created in `0022`, extended to treasurer + concierge in `0026`); those are not
+counted in the 55.
+</Callout>
 
 ## How a policy decides
 
@@ -22,6 +35,22 @@ Read-only roles (resident, treasurer-where-read-only) get `FOR SELECT` policies;
 gets narrow insert/select on their own submissions; treasurer gets write on `payments` and
 `expenses`.
 
+When a table has **no `complex_id` column** the policy takes a one-hop detour through its
+parent instead — `budgets` scopes via `fiscal_year_id`, and `0054` copies that shape
+verbatim:
+
+```sql
+CREATE POLICY collection_month_weights_admin_all ON public.collection_month_weights
+  FOR ALL TO authenticated
+  USING (
+    fiscal_year_id IN (
+      SELECT fy.id FROM public.fiscal_years fy
+      WHERE fy.complex_id = public.current_admin_complex_id()
+    )
+  )
+  WITH CHECK ( /* same */ );
+```
+
 ## Per-role intent
 
 | Role | Can read | Can write |
@@ -33,36 +62,110 @@ gets narrow insert/select on their own submissions; treasurer gets write on `pay
 
 These were filled in progressively as each feature shipped (the build plan's *"write RLS
 as you build each feature, not all at the end"* discipline): admin + concierge policies in
-migration `0023`, resident in `0024`, treasurer in `0025`, storage policies in `0026`.
+migration `0023`, resident in `0024`, treasurer in `0025`, storage policies in `0026`, and
+`collection_month_weights` in `0054`.
 
-## Deny-by-default tables
+`0054`'s three policies follow the same intent exactly: **admin `FOR ALL`** (editing the
+collection schedule is an admin act), **treasurer `SELECT`** and **resident `SELECT`** —
+residents see the same proration the admin sees, because an opaque "why do I owe more in
+July" is worse than a transparent one. Its verify block asserts not just that three
+policies exist, but that each one references *its own* role helper — a guard against the
+copy-paste bug where a treasurer policy is pasted from the admin one and silently keeps
+`current_admin_complex_id()`.
 
-Three tables have RLS **enabled with zero policies**, so all access is denied except via
-service-role:
+## Deny-by-default tables (RLS on, zero policies)
 
-- `magic_links` (dead — superseded by `apartments.view_token`)
-- `apartment_closing_balances` (dead — superseded by `fiscal_year_apartment_carries`)
-- `fiscal_year_apartment_carries` (live, but read only via service-role)
+Seven tables have RLS enabled and **no policies at all**, so `authenticated` and `anon` are
+denied everything and only the service-role client (which bypasses RLS) can reach them:
 
-An untracked `rls_auto_enable()` event trigger in production auto-enables RLS on any new
-table (a common Supabase safety pattern) — which is *why* `fiscal_year_apartment_carries`
-got RLS without an explicit statement. It's benign but should be captured in a migration
-for reproducibility.
+| Table | Since | Why it has no policies |
+| --- | --- | --- |
+| `magic_links` | `0022` | Dead — superseded by `apartments.view_token` |
+| `apartment_closing_balances` | `0022` | Dead — superseded by `fiscal_year_apartment_carries` |
+| `fiscal_year_apartment_carries` | `0027` | Live, but every read path is service-role (rollover summaries, past-year resident pages) |
+| `platform_admins` | `0051` | The superuser list must never be readable by a browser; `is_platform_admin()` is the only door |
+| `admin_audit_log` | `0052` | Written only by the cross-tenant admin console, never by a cookie client |
+| `idempotency_keys` | `0053` | Backend infrastructure; no user has any business reading another user's stored response |
+| `device_push_tokens` | `0055` | The backend registers/unregisters after resolving the caller itself |
+
+<Callout type="info">
+**Why deny-all is the *correct* posture, not a shortcut**
+
+For a table only the service-role client touches, an RLS policy would be dead code that
+still costs something. `0055` spells the reasoning out: a policy keyed on `users.id` would
+have to evaluate `current_user_id()` **per row** for zero security benefit, since no client
+reads the table directly. Worse, a policy is a *statement of intent* — writing one implies
+some cookie-bound client is meant to reach the table, which invites someone to later wire
+one up.
+
+The safety property that matters is that the table is **not silently open**: `ENABLE ROW
+LEVEL SECURITY` with no policy denies `authenticated` and `anon` outright. Leaving RLS
+*off* would be the bug, because PostgREST exposes every `public` table on the Data API and
+an RLS-less table is world-readable to anyone holding the anon key. That is precisely the
+shape of the `roles_readable` incident.
+
+So the pattern is: **RLS on + zero policies + explicit `service_role` grants in the same
+migration.** All five post-`0050` tables follow it, and each asserts `relrowsecurity` and
+`count(*) FROM pg_policies = 0` in its own verify block — `0056` re-asserts it too, so a
+grant change can't quietly widen the posture.
+</Callout>
+
+<Callout type="warning">
+**Correction to an earlier version of this page**
+
+This page previously attributed `fiscal_year_apartment_carries`'s RLS to an untracked
+`rls_auto_enable()` event trigger in production. That is wrong: migration `0027` enables it
+**explicitly**, with a comment saying the table *"inherits the no-policy = deny-by-default
+posture established by migration `0022` for inert tables"*. Nothing about that table's RLS
+is untracked.
+</Callout>
 
 ## Storage
 
-Receipt photos live in the `expense-receipts` Storage bucket; access is governed by storage
-RLS policies added for treasurer and concierge in migration `0026`. Signed URLs have a
-**1-hour TTL** across surfaces (audit L-A3 — fine for the pilot; shorten if receipts are
-sensitive).
+Receipt photos live in the `expense-receipts` Storage bucket, governed by **9 policies on
+`storage.objects`** — select/insert/delete for admin (`0006`, re-created in `0022` after
+the helper rewrite), treasurer and concierge (`0026`). Signed URLs have a **1-hour TTL**
+across surfaces (audit L-A3 — fine for the pilot; shorten if receipts are sensitive).
+
+## `service_role` grants — what changed in `0052`
+
+<Callout type="warning">
+**"No `DELETE` is granted anywhere" is no longer true**
+
+The 2026-06-14 reconciliation could state that `service_role` had **no `DELETE` anywhere**,
+consistent with soft-delete-only. Migration `0052` changed that: it loops over **17 tables**
+— `complexes`, `buildings`, `apartments`, `users`, `roles`, `invitations`, `fiscal_years`,
+`budgets`, `budget_categories`, `budget_lines`, `budget_versions`, `payments`, `expenses`,
+`special_collections`, `special_collection_shares`, `fiscal_year_apartment_carries`,
+`platform_admins` — granting `INSERT, UPDATE, DELETE` to `service_role`, which had been
+SELECT-mostly since `0008`.
+
+The reason is structural rather than a relaxation of the soft-delete rule. The admin
+console is **cross-tenant god-mode**: a platform superuser is *not* a per-community admin,
+so the `SECURITY DEFINER` RPCs — which authorize the caller by looking for an active admin
+role in the target complex — are the wrong path for it entirely. It mutates directly
+through the service-role client, and without these grants every write would `42501`.
+The `DELETE` grants exist for the few genuine hard-delete cases (bad invitation rows,
+removing a `platform_admins` entry, reconciling duplicate role rows); the console's UI
+still prefers soft-delete wherever a `deleted_at` column exists.
+
+Practical consequence: **`service_role` is now a much sharper instrument than it was.**
+Every console write is expected to leave a row in `admin_audit_log`, which is the
+compensating control — and that table is append-only *by grant* (`SELECT, INSERT` only), so
+the console cannot rewrite its own history.
+</Callout>
 
 ## Confirmed healthy (from the live-DB reconciliation)
 
-The 2026-06-14 introspection confirmed the live policy set is coherent with the app:
+The 2026-06-14 introspection confirmed the live policy set is coherent with the app, and
+the migrations since have preserved each property:
 
-- All 10 functions/RPCs are `service_role`-owned, `SECURITY DEFINER`, `search_path=''`.
-- `service_role` table grants match the RPCs' needs — and **no `DELETE` is granted
-  anywhere**, consistent with soft-delete-only.
+- Every RPC and RLS helper is `service_role`-owned, `SECURITY DEFINER`, `search_path=''` —
+  10 functions then, **13 now** (`assign_role`, `revoke_role`, `is_platform_admin` added by
+  `0050`/`0051`, each asserting owner + secdef + pinned `search_path` in its verify block).
+  See [Views & RPCs](/database/rpcs).
+- `service_role` table grants match what the RPCs and services actually need — now
+  including the `0052` console writes and the `0053`/`0056` idempotency grants.
 - Every consistency `CHECK` is intact (`payments_special_collection_consistency`,
   `expenses_approved_has_approver`, `expenses_rejected_has_reason`,
   `fiscal_years_archived_has_closure`, all `amount > 0`).
@@ -74,5 +177,8 @@ The 2026-06-14 introspection confirmed the live policy set is coherent with the 
 
 RLS is the bottom layer. Server actions also re-derive identity and scope-check
 client-supplied IDs *before* the DB (see [Auth & RLS wiring](/architecture/auth-rls)), so
-the two layers back each other up.
+the two layers back each other up. Note that the service-role paths — the admin console,
+the backend's idempotency store, push registration — sit **outside** the RLS layer by
+construction, so for those the application-side check is the *only* check. That is why
+`0052` pairs its grants with an audit log.
 </Callout>

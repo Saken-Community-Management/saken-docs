@@ -18,36 +18,60 @@ resident/magic-link equivalents) contains:
 - **Page 2+** — apartment balances (labels only, no names, for privacy), the payments
   list, and the expenses list.
 
-The admin taps **Export PDF report**, the browser downloads it, and the admin shares it
-manually via WhatsApp.
+The admin taps **Export PDF report** and the browser downloads it — or taps **Share report
+on WhatsApp**, which hands the actual PDF file to the native share sheet.
 
-<Callout type="info">
-**Period selector is partial**
+### Past years and Arabic
 
-The design specified a period dropdown (this month / last month / last quarter / YTD /
-all time). In practice the report always renders the **active fiscal year** — the
-`saken-server` backend notes per-`?fy=` PDF reports as *intentionally deferred*, matching
-the web app.
-</Callout>
+The two long-standing gaps here are closed:
+
+- **Past-year exports work.** `renderYtdPdf(supabase, complexId, { fyId })` threads the
+  fiscal year through `fetchReportData`, and `<ReportsMenuButton>` forwards the current
+  `?fy=` from the URL — so exporting from a past-year view produces **that year's** PDF. A
+  period dropdown (this month / last quarter / …) is still not built; the unit is the fiscal
+  year.
+- **Arabic renders.** The locale comes from the same cookie the app uses, and an Arabic
+  locale registers the Amiri font before rendering, so AR users get a proper RTL document
+  rather than glyph boxes.
 
 ## Payment receipts
 
 Each recorded payment can be downloaded as an **official PDF receipt**
 (`src/lib/reports/render-receipt-pdf.tsx`, `/api/payments/[id]/receipt`, shipped
 2026-06-15). It mirrors the on-screen receipt: complex, apartment, payer, amount, date,
-sequential receipt number, recorder, and balance after.
+sequential receipt number, recorder, and balance after. Receipts carry the same
+**Share on WhatsApp** affordance.
 
 ## Rendering path
 
 ```mermaid
 flowchart LR
-    Req[GET /api/reports/ytd] --> Data[fetchReportData]
+    Req[GET /api/reports/ytd] --> BE{backend enabled<br/>and not past-year<br/>and not Arabic?}
+    BE -- yes --> Proxy[proxyYtdPdf → GET /v1/reports/ytd]
+    Proxy -- ok --> Out[PDF response]
+    Proxy -- any failure --> Data
+    BE -- no --> Data[fetchReportData]
     Data --> RPDF[react-pdf renderToBuffer]
-    RPDF --> Buf[PDF buffer] --> DL[download]
+    RPDF --> Out
 ```
 
 The shared PDF scaffolding lives in `src/lib/reports/pdf-shared.tsx`; report data is
 gathered by `fetch-report-data.ts`.
+
+<Callout type="info">
+**Two rendering paths, deliberately asymmetric**
+
+When the backend is enabled, the route **proxies** the backend's PDF through with the
+web's own headers and filename (`src/lib/reports/pdf-proxy.ts`), because the backend's
+`Content-Disposition` differs — UTC-dated instead of Beirut-dated, and receipts drop the
+complex slug. The proxy returns `null` on **any** failure and the direct
+`@react-pdf/renderer` path runs, so a PDF download can never break because of the backend.
+
+Two documented skips: **past-year exports** (the backend's `GET /v1/reports/ytd` has no
+`?fy=`) and the **Arabic locale** (the backend renders with `pdfkit` and is EN-only). Both
+fall through to the web renderer. The accepted consequence is that the two renderers produce
+**equivalent content in a different visual layout**.
+</Callout>
 
 <Callout type="warning">
 **PDF generation is synchronous and unbounded**
@@ -62,6 +86,14 @@ years.
 
 ## Resident & magic-link reports
 
-Residents get the same report through their authenticated surface and the anonymous
-magic-link route (`/api/r/[apartmentId]/[token]/reports/ytd`), each gated on token/identity
-validation and scoped to the validated complex.
+Residents get the same report through their authenticated surface
+(`/api/resident/reports/ytd`) and the anonymous magic-link route
+(`/api/r/[apartmentId]/[token]/reports/ytd`), each gated on token/identity validation and
+scoped to the validated complex. Both carry the same backend-proxy-with-fallback logic as
+the admin route.
+
+## On mobile
+
+The React Native app fetches PDFs through the backend and hands them to the OS share sheet
+(`File.downloadFileAsync` + `Sharing.shareAsync`), with a post-save *"Share receipt?"*
+prompt — the same WhatsApp hand-off as the web, using the platform's native machinery.

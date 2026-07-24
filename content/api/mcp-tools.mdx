@@ -3,24 +3,40 @@ import { Callout } from 'nextra/components'
 # saken-mcp tools
 
 `saken-mcp` exposes Saken to LLM clients (Claude Desktop, Claude Code) as a set of tools. It
-speaks **MCP over stdio** and is a **client of `saken-server`** — every tool is a thin
-wrapper over a backend endpoint, so it inherits RLS, role checks, and the atomic RPCs for
-free.
+is a **client of the backend** — every tool is a thin wrapper over a `/v1` endpoint, so it
+inherits RLS, the capability matrix, and the atomic RPCs for free. No service-role key, no
+schema duplication, no second copy of the money math.
 
 ```
-LLM client ──(MCP/stdio)──> saken-mcp ──(HTTPS + Bearer JWT)──> saken-server ──> Supabase
+LLM client ──(MCP)──> saken-mcp ──(HTTPS + Bearer JWT)──> saken-api ──> Supabase
 ```
+
+> The MCP source calls the backend `saken-server`; the org repository is **`saken-api`**.
+> Same service.
+
+## Two transports
+
+| Entry | Transport | Auth |
+| --- | --- | --- |
+| `dist/index.js` (`npm run start:stdio`) | **stdio** — a local process launched by the client | `SAKEN_ACCESS_TOKEN` from the environment |
+| `dist/server.js` (`npm start`) | **Streamable HTTP**, stateless, on `POST /mcp` (`:4100`) | per-request `Authorization: Bearer` header, validated against `GET /v1/me` |
+
+The remote entry is the deployable one: every request must carry a real Saken access token,
+which `verifyBearer` validates by asking the backend who it belongs to. That token is then
+forwarded per-request into the API client, so a session has **exactly that user's access**.
+A blank/rejected/unreachable-API token is a `401` — it never falls open. There is also an
+unauthenticated `GET /health` for infra probes.
 
 ## Configuration
 
 | Var | Purpose |
 | --- | --- |
-| `SAKEN_API_URL` | base URL of `saken-server` (default `http://localhost:4000`) |
-| `SAKEN_ACCESS_TOKEN` | a Supabase access token (JWT) for the acting user; sent as `Authorization: Bearer …`. Leave empty to use only the public resident-link tool. |
+| `SAKEN_API_URL` | **versioned** base URL of the backend (default `http://localhost:4000/v1`) |
+| `SAKEN_ACCESS_TOKEN` | a Supabase access token (JWT) for the acting user; sent as `Authorization: Bearer …`. stdio only. Leave empty to use only the public tools. |
+| `PORT` | HTTP transport port (default `4100`) |
 
-> The token scopes everything: the MCP server has exactly the access of the user whose
-> token it holds. Use an admin token for admin tools, a treasurer token for treasurer
-> tools, and so on.
+> The token scopes everything. Use an admin token for admin tools, a treasurer token for
+> treasurer tools, and so on — the backend's capability matrix does the rest.
 
 Example client config:
 
@@ -31,7 +47,7 @@ Example client config:
       "command": "node",
       "args": ["/path/to/saken-mcp/dist/index.js"],
       "env": {
-        "SAKEN_API_URL": "http://localhost:4000",
+        "SAKEN_API_URL": "http://localhost:4000/v1",
         "SAKEN_ACCESS_TOKEN": "eyJ..."
       }
     }
@@ -39,43 +55,63 @@ Example client config:
 }
 ```
 
-## The 15 tools
+## The 57 tools
 
-| Tool | Backend | Access |
+<Callout type="info">
+**Full `/v1` coverage**
+
+The tool set grew from the original 15 to **57** — one tool per JSON endpoint of the
+backend's `/v1` API, grouped by domain in `src/tools/*.ts` and registered from
+`src/tools.ts`. Anything the web app, the mobile app, or the CLI can do through the
+backend, an LLM client can do here.
+</Callout>
+
+| Domain (`src/tools/…`) | Tools | Backend endpoints |
 | --- | --- | --- |
-| `saken_whoami` | `GET /me` | any authed user |
-| `saken_set_active_community` | `PUT /me/active-complex` | any authed user |
-| `saken_get_summary` | `GET /summary` | admin / treasurer / resident |
-| `saken_payment_form_data` | `GET /payments/form-data` | admin / treasurer |
-| `saken_record_collection` | `POST /payments` | admin / treasurer |
-| `saken_budget_line_options` | `GET /budget/line-options` | admin / treasurer |
-| `saken_record_expense` | `POST /expenses` | admin / treasurer |
-| `saken_list_pending_submissions` | `GET /admin/submissions` | admin / treasurer |
-| `saken_approve_submission` | `POST /admin/submissions/:id/approve` | admin / treasurer |
-| `saken_reject_submission` | `POST /admin/submissions/:id/reject` | admin / treasurer |
-| `saken_list_special_projects` | `GET /special-projects` | admin / treasurer / resident |
-| `saken_record_contribution` | `POST /special-projects/:id/contributions` | admin / treasurer |
-| `saken_create_invitation` | `POST /invitations` | admin |
-| `saken_list_fiscal_years` | `GET /fiscal-year` | admin / treasurer / resident |
-| `saken_rollover_fiscal_year` | `POST /fiscal-year/rollover` | admin |
-| `saken_resident_summary` | `GET /r/:apartmentId/:token/summary` | public (magic link) |
+| **Account** (`account.ts`) — 5 | `saken_whoami` · `saken_set_active_community` · `saken_set_language` · `saken_exit_community` · `saken_delete_community` | `GET /me` · `PUT /me/active-complex` · `PATCH /me/language` · `POST /communities/:id/exit` · `DELETE /communities/:id` |
+| **Summary & fiscal** (`summary.ts`) — 4 | `saken_get_summary` · `saken_apartment_ledger` · `saken_list_fiscal_years` · `saken_rollover_fiscal_year` | `GET /summary?fy=` · `GET /apartments/:id/ledger` · `GET /fiscal-year` · `POST /fiscal-year/rollover` |
+| **Collections & expenses** (`money.ts`) — 11 | `saken_payment_form_data` · `saken_record_collection` · `saken_get_collection` · `saken_update_collection` · `saken_delete_collection` · `saken_pre_saken_collections` · `saken_budget_line_options` · `saken_record_expense` · `saken_update_expense` · `saken_delete_expense` · `saken_pre_saken_expenses` | `GET /payments/form-data` · `POST`/`PATCH`/`DELETE /payments(/:id)` · `POST /payments/pre-saken` · `GET /budget/line-options` · `POST`/`PATCH`/`DELETE /expenses(/:id)` · `POST /expenses/pre-saken` |
+| **Budget editor** (`budget.ts`) — 6 | `saken_budget_editor_data` · `saken_add_budget_line` · `saken_update_budget_line` · `saken_delete_budget_line` · `saken_snapshot_budget_version` · `saken_budget_history` | `GET /budget/editor-data` · `POST`/`PATCH`/`DELETE /budget/lines(/:id)` · `POST /budget/versions` · `GET /budget/history` |
+| **Submit & review** (`review.ts`) — 7 | `saken_my_submissions` · `saken_submit_expense` · `saken_update_my_submission` · `saken_list_pending_submissions` · `saken_get_submission` · `saken_approve_submission` · `saken_reject_submission` | `GET`/`POST`/`PATCH /concierge/submissions(/:id)` · `GET /admin/submissions(/:id)` · `POST /admin/submissions/:id/{approve,reject}` |
+| **Special projects** (`projects.ts`) — 7 | `saken_list_special_projects` · `saken_get_special_project` · `saken_create_special_project` · `saken_update_special_project` · `saken_set_project_share` · `saken_record_contribution` · `saken_close_special_project` | `GET`/`POST`/`PATCH /special-projects(/:id)` · `PUT /:id/shares` · `POST /:id/contributions` · `POST /:id/close` |
+| **Team & roles** (`team.ts`) — 3 | `saken_list_members` · `saken_assign_role` · `saken_revoke_role` | `GET /communities/:id/members` · `POST /roles/{assign,revoke}` |
+| **Setup** (`setup.ts`) — 7 | `saken_create_community` · `saken_setup_state` · `saken_apartments_editor_data` · `saken_add_building` · `saken_add_apartment` · `saken_update_apartment` · `saken_create_resident` | `POST /complexes` · `GET /complexes/:id/{setup-state,apartments}` · `POST /complexes/:id/buildings` · `POST /buildings/:id/apartments` · `PATCH /apartments/:id` · `POST /residents` |
+| **Invitations** (`invitations.ts`) — 5 | `saken_create_invitation` · `saken_revoke_invitation` · `saken_reinvite` · `saken_invitation_context` · `saken_accept_invitation` | `POST /invitations(/:id/{revoke,reinvite})` · `GET /invitations/context` (public) · `POST /invitations/accept` |
+| **Public & infra** (`public.ts`) — 2 | `saken_resident_summary` · `saken_ping` | `GET /r/:apartmentId/:token/summary` (public) · `GET /health` (root, no `/v1`) |
 
-Inputs are validated with `zod` (UUIDs, decimal-string amounts, `YYYY-MM-DD` dates). All
-tools return JSON; API errors come back as readable, non-fatal tool errors.
+Inputs are validated with `zod` (UUIDs, decimal-string amounts, `YYYY-MM-DD` dates,
+3-decimal budget rates). All tools return JSON; API errors come back as readable,
+**non-throwing** tool errors (`Saken API <status>: <message>`).
 
 ## Notable tool details
 
-- **`saken_record_expense`** accepts a `categoryKey` (one of the 10 keys), a `lineId`
-  (a real budget-line id **or** the sentinel `"AUTO_OTHER"` to auto-create the category's
+- **Irreversible operations require `confirm: true`** — `saken_delete_community`,
+  `saken_rollover_fiscal_year`, and `saken_close_special_project` all refuse without an
+  explicit confirmation argument, so a model can't destroy a year or a community on a
+  loose paraphrase.
+- **`saken_record_expense`** accepts a `categoryKey` (one of the 10 keys), a `lineId` (a
+  real budget-line id **or** the sentinel `"AUTO_OTHER"` to auto-create the category's
   *Other* line), and a decimal-string `amount`.
-- **`saken_rollover_fiscal_year`** is irreversible and **blocked while concierge
-  submissions are pending** — the same guard as the UI.
-- **`saken_resident_summary`** is the only tool usable **without** a token — it reads a
-  community summary via a resident magic link (`apartmentId` + view token), no login.
+- **`saken_rollover_fiscal_year`** is **blocked while concierge submissions are pending** —
+  the same guard as the UI.
+- **`saken_resident_summary`** and **`saken_ping`** are the only tools usable **without** a
+  token — the first reads a community summary via a resident magic link (`apartmentId` +
+  view token), the second is a health probe.
+
+## Deliberately not exposed
+
+Three endpoint groups have no tool, because they don't fit a text-returning tool:
+
+| Endpoint | Why |
+| --- | --- |
+| `GET /reports/ytd`, `GET /payments/:id/receipt` (+ resident variants) | binary PDF responses |
+| `POST /expenses/:id/receipt-photo` | multipart upload |
+| `GET /admin/submissions/count` | redundant with the list tool |
 
 <Callout type="info">
 **Any endpoint can become a tool**
 
-Because everything flows through `saken-server`, adding a new backend endpoint makes it a
-candidate MCP tool with a few lines in `src/tools.ts`.
+Because everything flows through the backend, adding a new backend endpoint makes it a
+candidate MCP tool with a few lines in the matching `src/tools/*.ts` module. `saken-mcp` is
+just one client of the backend alongside the web app, the mobile app, and `saken-cli`.
 </Callout>

@@ -36,15 +36,27 @@ The server actions (`src/lib/special-projects/actions.ts`):
 | Action | Who |
 | --- | --- |
 | `createProject`, `updateProject`, `upsertProjectShare`, `closeProject` | **admin** only |
-| `recordProjectContribution(projectId, input)` | **admin or treasurer** (it's a payment write) |
+| `recordProjectContribution(projectId, input)` | capability `record_project_contribution` — **admin or treasurer** (it's a payment write) |
 
 ```ts
 recordProjectContribution(
   projectId: string,
   input: PaymentFormValues,
 ): Promise<PaymentFormSaveResult>
-// requireUser(supabase, ['admin', 'treasurer'])
+// if (isBackendEnabled()) return recordContributionViaApi(...)
+// requireCapability(supabase, 'record_project_contribution')
 ```
+
+<Callout type="info">
+**Two code paths, one behaviour**
+
+All five actions and the project reads have both a **direct-Supabase** body and a
+**backend-API** body (`GET`/`POST`/`PATCH /v1/special-projects`, `PUT /:id/shares`,
+`POST /:id/contributions`, `POST /:id/close`), selected by `isBackendEnabled()` and falling
+back to direct-Supabase on failure. `saken_close_special_project` — the MCP wrapper for the
+irreversible close — additionally requires an explicit `confirm: true`. See
+[Backend architecture](/architecture/backend).
+</Callout>
 
 ## Lifecycle
 
@@ -63,9 +75,12 @@ boundary *is* DB-enforced. A stale code comment claiming otherwise was the only 
 </Callout>
 
 <Callout type="warning">
-**Non-atomic two-step write**
+**Non-atomic two-step write — still open**
 
-`createProject` inserts the header and then the shares as two steps; a partial failure
-could orphan a header (audit L-C3). The fix is to wrap it in an RPC like the other
-multi-write flows.
+`createProject` inserts the header and then the shares as two steps; a partial failure could
+orphan a header (audit L-C3). True on **both** paths — the backend's create mirrors the same
+sequence. The fix is to wrap it in an RPC like the other multi-write flows. Contributions,
+by contrast, are protected on the backend path by the **idempotency interceptor**, which
+reserves the `Idempotency-Key` *before* executing so a double-tap or a mobile retry cannot
+insert two `payments` rows (audit #86, migration `0056`).
 </Callout>

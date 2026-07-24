@@ -2,80 +2,148 @@ import { Callout } from 'nextra/components'
 
 # Status & maturity
 
-Saken is a **pilot-stage MVP**. The core financial loop — *set up → dashboard →
-record payments/expenses → YTD report* — is polished and production-tested. Several
-advertised capabilities, though, are partial or stubbed. This page is the honest map.
+Saken is a **pilot-stage MVP that now runs as a multi-client system**. The core financial
+loop — *set up → dashboard → record collections/expenses → YTD report* — is polished and
+production-tested. As of **2026-07-23** the web app runs against a standalone backend, and
+a native app exists but has not shipped to a store. Several advertised capabilities are
+still partial. This page is the honest map, current to **2026-07-24**.
 
 <Callout type="warning">
 **This is an MVP**
 
 "Feature-complete for v1" does **not** mean "everything the client asked for." The
-biggest gaps are **real WhatsApp delivery, monthly collection targets, and automatic
-reminders** — none of which exist yet. Read the whole table before assuming a capability
-is live.
+remaining gaps are **real WhatsApp delivery, scheduled (rather than admin-triggered)
+reminders, and per-month collection targets in the calendar sense**. Read the whole table
+before assuming a capability is live.
+</Callout>
+
+## What is live in production
+
+| Surface | Where | Status |
+| --- | --- | --- |
+| **`saken`** — web app | `saken.com` (Vercel, `fra1`) | **Live.** Cut over to the backend on 2026-07-23; falls back to its direct-Supabase path automatically if the backend degrades |
+| **`saken-api`** — NestJS backend | Render, Frankfurt — `saken-api-prod` (`main`), `saken-api-dev` (`dev`) | **Live.** Always-on Starter services; `/health` 200, `/v1/docs` deliberately 404 in prod, unauthenticated `/v1/summary` 401 |
+| **`saken-admin`** — superuser console | `admin.saken.com` (its own Vercel project) | **Live.** Talks straight to Supabase with the service-role key — it does **not** go through `saken-api` |
+| **Supabase** | `eu-central-1`, Pro plan | **Live.** Prod schema at migration **`0056`** |
+| **Dev environment** | `dev.saken.com` + `saken-api-dev` + the dev Supabase project | **Live**, fully separated from prod |
+
+The web app, the mobile app, `saken-mcp` and `saken-cli` are all clients of the same
+`/v1` API. See [Architecture overview](/architecture/overview).
+
+## What is built but not released
+
+<Callout type="info">
+**The mobile app is finished code that nobody outside the team can install**
+
+`saken-mobile` (Expo SDK 57 / React Native 0.86, expo-router) is **built and merged** — role
+tab layouts, the full setup wizard, offline outbox for money writes, React Query
+persistence, push notifications via `POST /v1/devices`, biometric app-lock, per-variant
+deep links and universal links, Sentry, and OTA updates. It builds on **EAS** across
+`development` / `preview` / `production` profiles, with production producing an Android
+**AAB**.
+
+What is missing is the *release*, not the app:
+
+- **Not on the Play Store.** `eas.json`'s `submit.production` is still empty — there is no
+  store track, no service account, no submission.
+- The Play developer account **is registered** (as an individual) and the **$25** fee is
+  paid.
+- The **privacy policy is live** at [`saken.com/privacy`](https://saken.com/privacy) — the
+  store listing requires it.
+- `com.saken.mobile` is the permanent application id once published; the dev and preview
+  variants use `.dev` / `.preview` suffixes so they can coexist on one device.
+
+See [Mobile · Builds & releases](/mobile/builds-and-releases).
 </Callout>
 
 ## Feature status
 
-The table below is drawn from the **Feature Audit of 2026-06-16**
-(`docs/Saken-Feature-Audit-2026-06-16.docx`), which covers all 11 items from the
-client's development plan, reconciled with the code as of this writing.
+The numbering follows the client's original 11-item development plan, reconciled with the
+code as of 2026-07-24. Where a row changed since the 2026-06-16 feature audit, the change
+is called out.
 
 | # | Feature | Status | Notes |
 | --- | --- | --- | --- |
-| 1 | Sign up / log in via WhatsApp | 🟡 **Partial** | Phone OTP via Supabase Auth with a `channel="whatsapp"` option and a `/auth/whatsapp` form exist. There is **no** WhatsApp Business / Meta Cloud API integration — it's a generic phone-OTP button. Gated behind `NEXT_PUBLIC_PHONE_AUTH_ENABLED`. |
-| 2 | Send invitations (resident / treasurer / concierge) | 🟡 **Partial** | The invitation **pipeline** is done: `createInvitation` server action, 256-bit tokens, per-slot uniqueness, and a live acceptance flow (`accept_invitation` RPC). But **automated delivery is stubbed** — both `deliverByEmail` and `deliverByWhatsApp` currently return *"not yet implemented."* In practice the admin copies the invite link and shares it manually (the design's intended WhatsApp hand-off). The 2026-06-16 audit's *"email live via Resend"* is aspirational; the shipped code disagrees. |
-| 3 | Automatic payment reminders | 🔴 **Missing** | Zero infrastructure — no scheduler, no reminder delivery, no due-date tracking. Needs a whole new subsystem. |
-| 4 | Transfer admin/treasurer role between users | 🔴 **Missing** | Roles can be revoked and re-invited, but there is no hand-off / promote / demote flow. |
-| 5 | Role stacking (resident is also admin/treasurer) | ✅ **Done** | A resident can hold an admin/treasurer/concierge role via a separate `roles` row. The `accept_invitation` RPC handles escalation. |
+| 1 | Sign up / log in via WhatsApp | 🟡 **Partial** | Phone OTP via Supabase Auth with a `channel="whatsapp"` option and an `/auth/whatsapp` form. There is still **no** WhatsApp Business / Meta Cloud API integration — it's a generic phone-OTP button, gated behind `NEXT_PUBLIC_PHONE_AUTH_ENABLED`. Google, email+password, and email magic link are the live paths. |
+| 2 | Send invitations (resident / treasurer / concierge) | 🟡 **Partial** *(improved)* | **Email delivery is now real.** `saken-api` renders and sends the invite email through **Resend** (`mail.service.ts` + `invite-email.ts`) and transitions `delivery_status`. Two caveats: with `RESEND_API_KEY` unset it no-ops back to `pending`, and the web app's **direct-Supabase fallback** path still carries the old `deliverByEmail`/`deliverByWhatsApp` stubs. **WhatsApp delivery remains a stub** — the admin copies the link and shares it manually. |
+| 3 | Automatic payment reminders | 🟡 **Partial** *(was 🔴 Missing)* | An admin or treasurer can now **send a reminder batch** from `/dashboard/collections` ("Send reminders"). The backend picks apartments that are behind schedule using the *same* summary money-math as every dashboard, emails the residents via Resend, and pushes to their mobile devices. **Not automatic:** there is no cron or scheduler — a human taps the button — and the 20-hour per-complex cooldown lives in an in-memory map, so it is per-instance and resets on restart. |
+| 4 | Transfer admin/treasurer role between users | ✅ **Done** *(was 🔴 Missing)* | `/dashboard/team` assigns and revokes roles via the `assign_role` / `revoke_role` RPCs (migration `0050`), audited with `assigned_by`/`assigned_at`. Hand-off is assign-then-revoke; `revoke_role` refuses to remove a complex's **last** admin. |
+| 5 | Role stacking (resident is also admin/treasurer) | ✅ **Done** *(strengthened)* | Roles are genuinely stackable since migration `0049` (`UNIQUE(user_id, complex_id, role)`) — one person can hold admin **and** treasurer in one community. Effective permissions are the **union** of held roles, read through `CAPABILITY_MATRIX`. |
 | 6 | Admin/treasurer access for a non-resident | ✅ **Done** | Concierge and treasurer don't require an apartment. RLS reads `roles.role` without an apartment match. |
-| 7 | Tag & recognise treasurer role in the UI | ✅ **Done** | Dedicated `/dashboard/treasurers` page, treasurer-scoped `/resident/*` routes with a badge, role labels in management lists, full RLS write on payments + expenses. |
-| 8 | Monthly collection targets | 🟡 **Partial** | **Annual** budget-vs-actual is fully live (`/dashboard/cash`, `/dashboard/collections`, `/dashboard/budget`, `/dashboard/expenses`). There is **no** monthly tracking, per-month target, or calendar view. |
-| 9 | General flows & UI/UX polish | 🟠 **Rough edges** | Core flows are polished, but: a resident cash-balance display regression, an edit-then-back discontinuity, asymmetric pre-Saken back arrows, some dead-code clutter, a numeric-input inconsistency, a timezone inconsistency, and **no PWA manifest**. |
-
-### WhatsApp delivery for invitations
-
-<Callout type="error">
-**Both invite-delivery channels are stubs**
-
-Invitations register a delivery channel, but **both** implementations are not-yet-built:
-`deliverByWhatsApp()` returns `{ ok: false, reason: 'WhatsApp delivery not yet
-implemented' }` (`src/lib/invitations/delivery/whatsapp.ts`) and `deliverByEmail()`
-likewise returns *"Email delivery not yet implemented"* (`.../delivery/email.ts`). The
-invitation **row and token are created** and the **acceptance flow works** — only the
-automated send is deferred. The orchestrator is built to drop in a real WhatsApp Business
-API or Resend implementation without other changes. See
-[Email & WhatsApp delivery](/api/delivery).
-</Callout>
+| 7 | Tag & recognise treasurer role in the UI | ✅ **Done** | Treasurer-scoped `/resident/*` routes with a badge, role labels in management lists, full RLS write on payments + expenses. Note the old `/dashboard/treasurers` and `/dashboard/concierges` invite pages are now **redirect stubs to `/dashboard/team`** — elevated roles are assigned, not bearer-invited. |
+| 8 | Monthly collection targets | 🟡 **Partial** *(improved)* | Two pieces landed. **Owes-YTD proration**: each apartment shows what it owes *to date*, not just for the year. **An adjustable monthly schedule** (migration `0054`, `/dashboard/collections/schedule`): per-month *weights* for a fiscal year — boost July for a one-off cost and every other month re-normalises, with the annual total unchanged. What's still absent is a per-month *target amount* and a calendar view; the model weights the annual figure rather than budgeting month by month. |
+| 9 | General flows & UI/UX polish | 🟠 **Rough edges** | A broad accessibility/i18n/consistency sweep landed (shared modal shell, unified gear menus, confirm prompts on role assignment, the previously-orphaned resident directory wired up). Still open: **no PWA manifest**, a resident cash-balance display regression, an edit-then-back discontinuity, a timezone inconsistency, and some dead-code clutter. |
 
 ## Engineering maturity
 
-A full project audit (`docs/AUDIT-2026-06-14.md`) graded the codebase as *"genuinely
-well-engineered… far above the median for a pre-pilot app"* and found **zero Critical
-and zero application-layer security issues**. Several of the audit's high-priority items
-have since been **fixed** in the days after it was written:
+### The 2026-07-23 cross-repo audit
 
-| Audit finding (2026-06-14) | Resolution |
+A full audit ran the day of the production cutover, across **all five deployed surfaces** —
+web, `saken-api`, the admin console, mobile, and the shared schema. It is written up in
+the web repo at `docs/AUDIT-2026-07-23.md`.
+
+| | |
 | --- | --- |
-| 🔴 `roles_readable` view leaked every user's email to the anon key | **Fixed** — dropped in migration `0047` / commit `fe25f53` |
-| Phone-login path had no phone-uniqueness guard (H-S1) | **Fixed** — `uniq_authenticated_phone` added in migration `0044` |
-| Empty-string email/phone identity collision | **Fixed** — forbidden in migration `0045` (commit `cf193a3`) |
-| No automated tests anywhere (H-C1) | **Addressed** — a Vitest unit suite was added (commit `b09441f`, PR #11); pure money/diff/format functions are now covered |
-| Untyped Supabase client → ~558 hand-casts (H-C2) | **Addressed** — the Supabase data layer was typed (PR #11) |
+| **Findings** | **12** — filed as GitHub issues #82–#93 |
+| **Severity** | **0 Critical**, **2 High**, 9 Medium, 1 Low bundle |
+| **Status** | **All 12 fixed and closed**, shipped across four repositories |
 
-What the audit flags as **still open** (none pilot-blocking): no pagination on list
-pages, money aggregations pulled into JS rather than SQL, sequential dashboard fetches,
-admin/resident page clones, the hand-applied migration process (now mitigated by a
-[CI migration-replay job](/operations/ci-cd)), and `console.error` as the only logging
-sink.
+**The security model held.** The audit found no authentication or authorization bypass on
+any surface, no cross-tenant read or write, and money math on the backend faithful to the
+web's direct-Supabase path. What it found instead were **failure-mode defects** — places
+where a degraded backend took a page down instead of falling back, where a concurrent retry
+could double-write, where raw Postgres text reached clients, and where the audit log had
+gaps.
+
+Both High findings were in the strangler seam:
+
+| Finding | Defect | Fix |
+| --- | --- | --- |
+| **#82** | The summary read adapter dereferenced the response unguarded, so an empty or partial backend `200` **500'd `/dashboard`** instead of falling back | Null-guard plus the whole mapping wrapped; returns `null` on anything malformed |
+| **#83** | The mobile magic-link handler established the session but **never navigated** — passwordless login stranded the user on the sign-in form | `router.replace('/')` on a real session |
+
+A third (#87) was the same class: `backendFetch` had no timeout, so a backend that accepted
+the socket and then stalled never returned `null` and the Server Component hung to a Vercel
+504. It now aborts at **6 seconds**.
+
+<Callout type="info">
+**One finding was wrong, and the audit says so**
+
+The backend half of **#92** claimed the concierge-approval path kept the submission's
+original `fiscal_year_id` instead of recomputing it. On reading the code to fix it, the
+recomputation was already there and correct. A narrower real bug was found in the same
+code and fixed; the issue was closed with the correction recorded rather than quietly
+dropped. Worth knowing when you read the audit — its claims were re-verified against source
+before each fix, which is exactly what caught this one.
+</Callout>
+
+The earlier `docs/AUDIT-2026-06-14.md` graded the web app alone as
+*"genuinely well-engineered… far above the median for a pre-pilot app"* with zero Critical
+and zero application-layer security issues. Its high-priority items — the leaky
+`roles_readable` view, the missing phone-uniqueness guard, the empty-string identity
+collision, no tests, the untyped Supabase client — have all since been fixed.
+
+### What remains open
+
+| Item | Why it's still open |
+| --- | --- |
+| **Play Store submission** | No `eas submit` config, no track, no service account. Account and privacy policy are ready. |
+| **Native Arabic review** (#46) | Every AR string is AI-generated and carries an `_status: ai-pending-native-review` marker. Don't onboard an Arabic-locale user until a native Lebanese speaker reads the set. |
+| **CI prod-migration leg** (#19) | Migrations are still hand-applied; the deployed schema can't be fully reconstructed from the repo. The audit calls this the system's concentrated remaining risk. |
+| **Branch protection** on `main`/`develop` | Blocked by the private-repo plan tier — nothing gates a direct push. |
+| **Scheduled reminders** | Reminders are admin-triggered; the cooldown is in-process memory. A durable `reminder_batches` table plus a scheduler is the follow-up. |
+| **Backend hardening leftovers** (#93) | No `helmet`; `round2` rounds negative exact-half-cents differently from the web; an Expo push token is re-pointed rather than reconciled on conflict; a PostgREST `.or()` filter is built by string interpolation from JWT-derived values. |
+| **PWA manifest** | Still absent — the "installs to your home screen" claim is aspirational on web. |
+| **Past-year PDF reports** | The YTD PDF endpoints always render the active fiscal year; `?fy=` isn't threaded through them. |
 
 <Callout type="info">
 **The docs may lead the code, or vice-versa**
 
-Saken moves fast. The canonical `CLAUDE.md` reference once fell a migration behind the
-schema; this site reconciles the design docs, the audit, the live-DB introspection, and
-the git history as of **June 2026**. When in doubt, **the live database is ground
-truth** — a lesson the team learned the hard way (see [Migration history](/database/migrations)).
+Saken moves fast. This site reconciles the design docs, the two audits, live-DB
+introspection, and the repositories as of **2026-07-24**. When in doubt, **the live
+database is ground truth** — a lesson the team learned the hard way, and one the 2026-07-23
+audit followed by checking every schema claim against `pg_catalog` rather than the
+migration files (see [Migration history](/database/migrations)).
 </Callout>
 
 ## Legend

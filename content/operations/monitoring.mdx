@@ -2,57 +2,132 @@ import { Callout } from 'nextra/components'
 
 # Monitoring & logs
 
-An honest account of Saken's observability today: **minimal**. This is a known gap, not a
-built-out capability.
+An honest account of Saken's observability after the production cutover. It has improved —
+there are health checks, correlation IDs, and an audit log where there used to be nothing —
+but the headline is unchanged: **there is no alerting.** Nothing tells you something broke.
+Someone has to look.
 
 ## What exists
 
-- **Vercel function logs** — the web app's server actions and route handlers log through
-  `console.error`, visible in the Vercel dashboard's runtime logs.
-- **Supabase logs** — Postgres, Auth, and Storage logs in the Supabase dashboard
-  (query/error logs, auth events).
-- **GitHub Actions run logs** — the CI app + migration-replay + deploy-migrations jobs;
-  the migration approval gate also emails reviewers.
-- **The database as audit trail** — `budget_versions` (immutable budget snapshots),
-  `created_at`/`updated_at` on most tables, soft-delete tombstones (`deleted_at`), and
-  preserved `receipt_number` gaps all leave a partial trail you can query directly.
+### Platform logs
+
+| Source | What you get |
+| --- | --- |
+| **Vercel runtime logs** | Server actions and route handlers for all three web surfaces (`saken-web`, `saken-admin`, `saken-docs`). Retention is whatever the plan gives; nothing is exported |
+| **Render logs** | `stdout`/`stderr` per service (`saken-api`, `saken-api-dev`), including the Nest access log below, plus build and deploy logs |
+| **Supabase logs** | Postgres, Auth, and Storage logs — query/error logs, auth events. The place to look for `42501` permission-denied and RLS-shaped failures |
+| **GitHub Actions run logs** | `app`, `migration-replay`, and (when enabled) `deploy-migrations` |
+
+### Health checks — the one genuinely automated signal
+
+The backend exposes `GET /health` → `{"status":"ok","service":"saken-backend"}`, mounted at
+the **root**, outside the `/v1` prefix, so a probe never depends on an API version. Two
+independent things watch it:
+
+- **Render's platform health check** (`healthCheckPath: /health` in `render.yaml`) — gates
+  deploys. A service that boots but can't answer `/health` fails its deploy rather than
+  quietly replacing a working one. This is what would have caught the Node 20 native-
+  `WebSocket` boot crash.
+- **The container's own `HEALTHCHECK`** in the Dockerfile — every 30s, 3s timeout, 15s
+  start period, 3 retries.
+
+Both are *deploy-time and liveness* signals. Neither notifies anyone if the service goes
+unhealthy an hour after a green deploy.
+
+### Correlation IDs + structured access logs (backend)
+
+`RequestContextMiddleware` accepts an inbound `x-correlation-id` (or `x-request-id`),
+generates one when absent, attaches it to the request, and **echoes it on the response
+header**. The global exception filter includes it in error bodies. Every request logs one
+line on finish:
+
+```
+<correlation-id> GET /v1/summary 200 84ms
+```
+
+…at `error` level for 5xx, `log` otherwise. So a single request can be traced across a
+client, the backend, and the Render logs — provided you have the id, which means provided
+someone captured the failing response.
+
+`AllExceptionsFilter` normalizes every error to one envelope (`{ error: { code, message,
+details? } }`) with a stable machine-readable `code`. Raw Postgres text never reaches the
+client; SQLSTATEs are mapped upstream and 5xx bodies stay generic. Good for clients, and
+good for grepping logs by `code` — but only inside the retention window of whatever
+platform holds the logs.
+
+### The admin console (the biggest change since the last revision)
+
+`saken-admin` is now the closest thing Saken has to an observability surface:
+
+| Route | What it shows |
+| --- | --- |
+| `/` | Signups over 6 months, setup funnel, active users (7d / 30d), and per-community health — cash, budget, collected, collection %, pending items, last activity |
+| `/audit` | The append-only `admin_audit_log` — actor, action, target, before/after JSON, filterable by action or actor |
+| `/security` | Current hardening posture: read-only mode, IP allowlist, authorization sources |
+
+The audit log is real accountability: **every** console mutation flows through a single
+choke point (`adminMutate`) that re-checks auth, enforces the read-only switch, performs
+the write, and appends an audit row. The table has RLS enabled with **no policies** — only
+service-role reaches it.
+
+Two caveats. It covers **operator** actions only — an ordinary admin recording a collection
+in the web app writes nothing here. And it is a **pull** surface: it answers "what
+happened?" when you go and look, not "something is wrong" when it is.
+
+### The database as audit trail
+
+Independently of any tooling, the schema itself preserves a partial history you can query
+directly: immutable `budget_versions` snapshots with generated diffs, `created_at` /
+`updated_at` on most tables, soft-delete tombstones (`deleted_at`) instead of row removal,
+`assigned_by` / `assigned_at` on role grants, and the gaps left in per-complex
+`receipt_number` sequences.
+
+### Backups
+
+Supabase **Pro** on the production project: daily automatic backups (7-day retention) plus
+Point-in-Time Recovery. Note that **Storage objects — receipt photos — are not included**;
+only the metadata rows are.
 
 ## What's missing
 
-<Callout type="warning">
-**`console.error` is the entire logging strategy**
+<Callout type="error">
+**There is no alerting anywhere in the system.**
 
-There is **no aggregation, alerting, or error tracking** (audit L-C1). Given Saken's own
-history of silent `42501` (permission-denied) failures, a systemic failure can stay
-invisible until someone reads raw Vercel logs. The audit's recommendation: route through
-**Sentry** (or Logflare) before scaling. Adding Sentry's free tier is also on the
-build plan's pre-pilot checklist.
+No uptime monitor, no on-call, no notification on a failed deploy, a 5xx spike, a health-
+check flap, or a Supabase incident. If `saken-api` starts returning 500s at 02:00, it does
+so until someone opens a dashboard. The deleted `saken-api` **Vercel** project had been
+serving 500s for an unknown length of time precisely because nothing watched it.
 </Callout>
 
-Other gaps:
-
-- **No uptime/health monitoring** wired up, though `saken-server` exposes `GET /health`.
-- **No storage-orphan cleanup** — receipt photos of soft-deleted expenses accumulate with
-  no janitor job (audit M-OPS1).
-- **No in-app support channel** — for the pilot, "support" is the developer's WhatsApp
-  number (build plan).
-
-## Recommended before scaling
-
-| Item | Why |
+| Gap | Detail |
 | --- | --- |
-| Add **Sentry** | Catch crashes and silent permission failures you won't see in testing |
-| Wire a **log sink** (Logflare/Sentry breadcrumbs) | Make 42501-class failures visible |
-| **Health-check monitoring** on the backend once wired | Detect outages |
-| A **storage-orphan cleanup** job | Reclaim space from deleted-expense photos |
-| **Supabase Pro backups** ($25/mo) | Daily backups — non-negotiable for a money app |
+| **No error tracking on web, admin, docs, or backend** | None of those four repos depends on Sentry or any equivalent. Errors are `console.error` / Nest `Logger` into platform logs |
+| **Sentry in mobile is wired but effectively off** | `saken-mobile` depends on `@sentry/react-native` and configures the Expo plugin (`organization: saken`, `project: saken-mobile`), but init is **DSN-gated**: `initSentry()` returns early and `Sentry.wrap()` is skipped when `EXPO_PUBLIC_SENTRY_DSN` is unset. No DSN appears in `eas.json`'s inlined profile env, so unless it is set as an EAS environment variable, mobile crash reporting is **not reporting** |
+| **No log aggregation or retention** | Logs live in three separate platform consoles with platform-default retention. There is no search across them and no export. A correlation id only helps while the log line still exists |
+| **No uptime monitoring** | `/health` is a perfectly good probe target; nothing external polls it |
+| **No storage-orphan cleanup** | Receipt photos of soft-deleted expenses accumulate with no janitor job |
+| **No in-app support channel** | Support is an out-of-band WhatsApp number |
+
+## Recommended next steps, in order of leverage
+
+| Step | Why it's ranked here |
+| --- | --- |
+| 1. **External uptime check on both `/health` endpoints** | Cheapest possible fix for the single biggest gap. Turns "someone notices" into "someone is told." Any free uptime service works — the endpoint already exists and is unauthenticated |
+| 2. **Set `EXPO_PUBLIC_SENTRY_DSN`** | The mobile integration is already written and the Sentry project is already named. This is a variable, not a project |
+| 3. **Add error tracking to the backend, then the web app** | The backend is where a single failure affects every client. Its exception filter is already a natural single hook |
+| 4. **Alert on Render deploy failure** | A failed deploy currently looks identical to a deploy nobody looked at |
+| 5. **Storage-orphan cleanup job** | Cost and hygiene, not correctness — genuinely lower priority |
 
 ## The operating principle
 
 Saken's hardest-won operational lesson is observability-adjacent: **the live database is
-ground truth.** Several real problems (the `roles_readable` PII leak, migration drift) were
-invisible from the code and the logs and only surfaced by **introspecting production
-directly** via the Supabase Management API. Until richer monitoring exists, periodic
-live-DB introspection (the method in `docs/SCHEMA-live-reconciliation-2026-06-14.md`)
-remains the most reliable way to know the true state. See
+ground truth.** Several real problems — the `roles_readable` view leaking every role row to
+anon, migration drift, the empty-string-phone identity collision — were invisible from the
+code *and* from the logs, and surfaced only by introspecting production directly (Supabase
+Management API, `pg_catalog` queries).
+
+Until richer monitoring exists, periodic live-DB introspection remains the most reliable
+way to know the true state of the system. Not because it's a good monitoring strategy — it
+isn't, it's manual and it only runs when someone remembers — but because it is the one
+method that has repeatedly found things nothing else found. See
 [Migration history](/database/migrations).
